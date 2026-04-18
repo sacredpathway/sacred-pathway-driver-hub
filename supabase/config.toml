@@ -1,0 +1,11 @@
+# Sacred Pathway — supabase/config.toml
+# Used by `supabase start` for local dev and kept in git so the functions
+# + migrations layout is portable. Secrets never live in this file.
+
+project_id = "sacred-pathway"
+
+[functions.extract-document]
+verify_jwt = true
+
+[functions.generate-insights]
+verify_jwt = true

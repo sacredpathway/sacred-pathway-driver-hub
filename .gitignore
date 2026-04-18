@@ -1,0 +1,25 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserdatad/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+Package.resolved
+
+# Supabase Edge Function secrets — NEVER commit
+supabase/.env
+supabase/.env.local
+supabase/.branches/
+supabase/.temp/
+
+# General env
+.env
+.env.local
+
+# macOS
+.DS_Store

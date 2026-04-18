@@ -1,0 +1,87 @@
+name: CI
+
+# Runs on every push + every PR to main. All checks are read-only —
+# nothing ever talks to your live Supabase project or OpenAI.
+#
+# What each job proves:
+#   edge-functions → Deno typechecks + lints both Edge Functions
+#   scripts        → bash -n parses deploy.sh and smoke-test.sh
+#   guardrails     → fails if Anthropic / Claude refs sneak back in
+#
+# Triggers:
+#   push to main
+#   pull_request targeting main
+#   manual (workflow_dispatch)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  edge-functions:
+    name: Typecheck + lint Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: deno fmt --check
+        working-directory: supabase/functions
+        run: deno fmt --check
+
+      - name: deno lint
+        working-directory: supabase/functions
+        run: deno lint
+
+      - name: deno check (typecheck)
+        working-directory: supabase/functions
+        # `deno check` resolves the entire module graph, including the
+        # shared helpers and the esm.sh supabase-js import.
+        run: |
+          deno check extract-document/index.ts
+          deno check generate-insights/index.ts
+
+  scripts:
+    name: Shell scripts syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n on every script
+        run: |
+          for f in scripts/*.sh; do
+            echo "checking $f"
+            bash -n "$f"
+          done
+
+  guardrails:
+    name: No Anthropic / Claude refs in Swift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if Anthropic refs re-appear
+        # Doc comments that mention the historical ClaudeAIService are
+        # allowed (they help newcomers understand the refactor). Filter
+        # lines that are just Swift doc comments before grepping for
+        # live-code Anthropic/Claude markers.
+        run: |
+          set -e
+          echo "::group::Scanning Swift files"
+          # Remove lines whose first non-whitespace characters are '///' or '//'
+          # so pure-comment references don't cause false positives.
+          MATCHES=$(find SacredPathway -name '*.swift' -print0 \
+            | xargs -0 grep -HnE -v "^\s*(///|//)" \
+            | grep -Ei "api\.anthropic\.com|x-api-key|sk-ant-|anthropicAPIKey|ClaudeAIService\s*\." \
+            || true)
+          echo "::endgroup::"
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Anthropic/Claude references found in live Swift code:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "Clean."

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — Sacred Pathway Driver Hub</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    color: #1a1a1a;
+    line-height: 1.6;
+    background: #fafafa;
+  }
+  h1 { font-size: 32px; color: #0f1c3a; margin-bottom: 8px; }
+  h2 { font-size: 22px; color: #0f1c3a; margin-top: 40px; border-bottom: 2px solid #e8b446; padding-bottom: 6px; }
+  h3 { font-size: 18px; color: #0f1c3a; margin-top: 24px; }
+  .updated { color: #666; font-size: 14px; margin-bottom: 32px; }
+  .brand { color: #e8b446; font-weight: 700; }
+  a { color: #0f1c3a; }
+  ul { padding-left: 24px; }
+  li { margin-bottom: 6px; }
+  .contact {
+    background: #fff;
+    border-left: 4px solid #e8b446;
+    padding: 16px 20px;
+    margin-top: 24px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy</h1>
+<div class="updated">
+  <span class="brand">Sacred Pathway Driver Hub</span> — Effective: April 15, 2026
+</div>
+
+<p>This Privacy Policy describes how Sacred Pathway LLC ("Sacred Pathway," "we," "us," or "our") collects, uses, and protects information when you use the Sacred Pathway Driver Hub mobile application (the "App"). By using the App, you agree to the practices described here.</p>
+
+<h2>1. Information We Collect</h2>
+
+<h3>Information You Provide</h3>
+<ul>
+  <li><strong>Account information:</strong> Name, email address, phone number (if you create an account).</li>
+  <li><strong>Business information:</strong> Carrier name, MC/DOT number, authority details, driver names, and settlement configuration.</li>
+  <li><strong>Document content:</strong> Rate confirmations, bills of lading, fuel receipts, invoices, lumper fees, toll receipts, repair bills, and similar business documents you scan or upload.</li>
+  <li><strong>Financial data:</strong> Load revenue, expenses, driver pay calculations, and settlement details.</li>
+</ul>
+
+<h3>Information Collected Automatically</h3>
+<ul>
+  <li><strong>Device information:</strong> Device model, operating system version, app version, and unique device identifiers.</li>
+  <li><strong>Usage data:</strong> Features used, actions taken, and crash reports (to improve the App).</li>
+</ul>
+
+<h3>Information From Your Device (with your permission)</h3>
+<ul>
+  <li><strong>Camera:</strong> To scan documents. Images captured via the camera are processed as described below.</li>
+  <li><strong>Photo Library:</strong> To allow you to upload existing document images.</li>
+  <li><strong>Files:</strong> To allow you to import PDFs and images from your device's file system.</li>
+  <li><strong>Notifications:</strong> To send optional alerts about missing receipts, settlement reminders, and app updates.</li>
+</ul>
+
+<p><strong>We do NOT collect:</strong> precise location data, contacts, health data, or any data from other apps.</p>
+
+<h2>2. How We Use Your Information</h2>
+<ul>
+  <li>To extract data from scanned and uploaded documents using AI-powered recognition.</li>
+  <li>To calculate driver settlements, load profitability, and expense breakdowns.</li>
+  <li>To generate paystubs, reports, and PDF exports for your records.</li>
+  <li>To provide customer support and respond to your inquiries.</li>
+  <li>To improve App features, fix bugs, and develop new functionality.</li>
+  <li>To comply with legal obligations and enforce our Terms of Service.</li>
+</ul>
+
+<h2>3. AI-Powered Document Processing</h2>
+<p>The App uses a third-party AI service provided by <strong>OpenAI</strong> to read and extract information from documents you scan or upload. When you process a document:</p>
+<ul>
+  <li>The original file (image or PDF) is uploaded from your device to your private storage area in Supabase Storage. Storage objects are protected by row-level security so only your authenticated session can access them.</li>
+  <li>The App then calls a secure backend service (a Supabase Edge Function running on servers we control). That backend service fetches the file from storage and sends it to OpenAI's Chat Completions API over an encrypted connection. Your device never contacts OpenAI directly — the OpenAI API key is held only on the backend.</li>
+  <li>The AI extracts structured data (load numbers, brokers, rates, line items, expense amounts). The backend persists both the structured JSON and the raw model response alongside the original file in your account, and returns the structured data to the App so you can review and edit it.</li>
+  <li>OpenAI does not use API content to train its models by default. OpenAI's privacy practices are governed by their own policy: <a href="https://openai.com/policies/privacy-policy" target="_blank">openai.com/policies/privacy-policy</a>.</li>
+  <li>API request and response data may be retained by OpenAI for up to 30 days for abuse and misuse monitoring, then deleted, in accordance with OpenAI's API data usage policies.</li>
+  <li>You may delete any uploaded document and its extracted data at any time from the in-app Document Vault. Deletion removes both the file from Supabase Storage and the structured data from the database.</li>
+</ul>
+
+<h2>4. Third-Party Services</h2>
+<p>We use the following third-party services, each with their own privacy policies:</p>
+<ul>
+  <li><strong>OpenAI</strong> — AI-powered document extraction. <a href="https://openai.com/policies/privacy-policy" target="_blank">Privacy Policy</a></li>
+  <li><strong>Apple (App Store & In-App Purchases)</strong> — subscription billing and app distribution. <a href="https://www.apple.com/legal/privacy/" target="_blank">Privacy Policy</a></li>
+  <li><strong>Stripe</strong> (if you subscribe via the web) — payment processing. <a href="https://stripe.com/privacy" target="_blank">Privacy Policy</a></li>
+  <li><strong>Apple CloudKit / iCloud</strong> — secure cloud backup of your data (if you enable it).</li>
+</ul>
+<p>We do not sell your personal information to any third party.</p>
+
+<h2>5. Data Storage and Security</h2>
+<ul>
+  <li>Your data is stored locally on your device and, if you enable backup, securely in Apple iCloud under your Apple ID.</li>
+  <li>We use industry-standard encryption (TLS 1.2+) for all data transmitted over networks.</li>
+  <li>Access to your data within our systems is restricted to authorized personnel only.</li>
+  <li>Despite our efforts, no method of transmission or storage is 100% secure. We cannot guarantee absolute security.</li>
+</ul>
+
+<h2>6. Your Rights and Choices</h2>
+<ul>
+  <li><strong>Access:</strong> You can view all data stored in the App at any time.</li>
+  <li><strong>Export:</strong> You can export your data as PDF, CSV, or image files at any time.</li>
+  <li><strong>Delete:</strong> You can delete any document, load, or record from within the App. Uninstalling the App removes all locally stored data.</li>
+  <li><strong>Account deletion:</strong> Email us at the address below to request full account deletion.</li>
+  <li><strong>Permissions:</strong> You can revoke camera, photos, files, or notification permissions at any time in iOS Settings.</li>
+  <li><strong>California Residents (CCPA):</strong> You have the right to know, delete, and opt out of the sale of personal information. We do not sell personal information.</li>
+  <li><strong>EU/UK Residents (GDPR):</strong> You have the right to access, rectify, erase, restrict, object to processing, and data portability. Contact us to exercise these rights.</li>
+</ul>
+
+<h2>7. Children's Privacy</h2>
+<p>The App is intended for business use by commercial drivers and carriers and is not directed to children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us and we will delete it.</p>
+
+<h2>8. Data Retention</h2>
+<p>We retain your data for as long as your account is active or as needed to provide the App's functionality. If you delete your account, we will delete your personal information within 30 days, except where retention is required by law (for example, tax or accounting records).</p>
+
+<h2>9. Changes to This Policy</h2>
+<p>We may update this Privacy Policy from time to time. If we make material changes, we will notify you through the App or by email. Continued use of the App after changes constitutes acceptance of the updated policy.</p>
+
+<h2>10. Contact Us</h2>
+<div class="contact">
+  <p>If you have questions about this Privacy Policy or your data, contact us:</p>
+  <p>
+    <strong>Sacred Pathway LLC</strong><br>
+    Email: <a href="mailto:demarquishinton@gmail.com">demarquishinton@gmail.com</a><br>
+    App: Sacred Pathway Driver Hub
+  </p>
+</div>
+
+</body>
+</html>
