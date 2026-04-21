@@ -15,7 +15,9 @@
 //   { "ok": true, "text": "<summary>" }
 // ============================================================================
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+// supabase-js 2.49.4+ verifies JWTs via JWKS — required after the JWT
+// Signing Keys migration that issues ES256 tokens.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 import { jsonResponse, withCors } from "../_shared/cors.ts";
 import { ChatError, chatCompletion } from "../_shared/openai.ts";
 

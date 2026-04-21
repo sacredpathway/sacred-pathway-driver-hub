@@ -4,23 +4,29 @@
 // Response contract (strict):
 //
 //   Success 200:
-//     { "success": true, "document_id": "...", "status": "processed",
+//     { "success": true, "document_id": "...", "status": "processed" | "pending_manual_review",
 //       "extracted": {...}, "raw_text": "...", "model": "...",
 //       "confidence": "high" | "medium" | "low" }
 //
-//   Error (non-2xx or ok=false):
+//   Error (non-2xx):
 //     { "success": false,
 //       "code": "SCAN_TEMPORARILY_UNAVAILABLE" | "RATE_LIMITED" |
 //               "TIMEOUT" | "AUTH_EXPIRED" | "UNKNOWN_SCAN_ERROR",
-//       "message": "<user-friendly text>" }
+//       "message": "<user-friendly text>",
+//       "details": "<stage:code — safe technical hint, ≤200 chars>" }
 //
 // No raw provider errors, JSON fragments, stack traces, or API keys are
-// ever returned to the client. All provider details are logged to the
-// function logs only.
+// ever returned to the client's `message` field. `details` is a short,
+// stage-prefixed hint that is safe to surface under a "Show details"
+// disclosure in the UI.
 // ============================================================================
 
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+// Pin to a supabase-js release that supports the new JWT Signing Keys
+// (asymmetric ES256/RS256) via JWKS, so `auth.getUser()` verifies tokens
+// signed with either the legacy HS256 secret OR the new signing keys.
+// Shipped in supabase-js ≥ 2.49.4.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 import { jsonResponse, withCors } from "../_shared/cors.ts";
 
 // ---------- Config ----------
@@ -32,7 +38,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-// ---------- Error helpers ----------
+// ---------- Error envelope ----------
 type ErrorCode =
   | "SCAN_TEMPORARILY_UNAVAILABLE"
   | "RATE_LIMITED"
@@ -59,14 +65,36 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   UNKNOWN_SCAN_ERROR: 502,
 };
 
-function errorResponse(code: ErrorCode, logDetail?: string): Response {
-  if (logDetail) {
-    console.error(`[extract-document][${code}] ${logDetail.slice(0, 2000)}`);
-  }
+function clip(s: string, max = 200): string {
+  if (!s) return "";
+  return s.length > max ? s.slice(0, max) : s;
+}
+
+function errorResponse(
+  traceId: string,
+  code: ErrorCode,
+  stage: string,
+  logDetail?: string,
+): Response {
+  const line = `[${traceId}][${code}][${stage}] ${logDetail ?? ""}`;
+  console.error(line);
   return jsonResponse(
-    { success: false, code, message: USER_MESSAGE[code] },
+    {
+      success: false,
+      code,
+      message: USER_MESSAGE[code],
+      details: clip(`${stage}: ${logDetail ?? code}`),
+    },
     HTTP_STATUS[code],
   );
+}
+
+function log(traceId: string, stage: string, info?: unknown): void {
+  if (info === undefined) {
+    console.log(`[${traceId}][${stage}]`);
+  } else {
+    console.log(`[${traceId}][${stage}]`, info);
+  }
 }
 
 // ---------- Prompt ----------
@@ -120,14 +148,19 @@ Always include:
 Omit fields you cannot see — do not guess. Dates must be ISO YYYY-MM-DD.
 Numbers must be plain JSON numbers (no "$" or commas).
 
-Return ONLY a JSON object matching this schema. No markdown. No prose.
+Return ONLY a valid JSON object matching this schema. No markdown fences.
+No prose. No explanation. The very first character of your response must
+be "{" and the last character must be "}".
 `.trim();
 
 // ---------- Handler ----------
 Deno.serve(withCors(async (req) => {
+  const traceId = crypto.randomUUID().slice(0, 8);
+  const t0 = Date.now();
+
   try {
     if (req.method !== "POST") {
-      return errorResponse("UNKNOWN_SCAN_ERROR", `method=${req.method}`);
+      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "method", `method=${req.method}`);
     }
 
     // ---- 1. Authenticate ----
@@ -136,7 +169,7 @@ Deno.serve(withCors(async (req) => {
       ? authHeader.slice(7).trim()
       : "";
     if (!jwt) {
-      return errorResponse("AUTH_EXPIRED", "missing bearer token");
+      return errorResponse(traceId, "AUTH_EXPIRED", "auth", "missing bearer token");
     }
 
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
@@ -145,21 +178,23 @@ Deno.serve(withCors(async (req) => {
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData?.user) {
-      return errorResponse("AUTH_EXPIRED", `getUser: ${userErr?.message}`);
+      return errorResponse(traceId, "AUTH_EXPIRED", "auth", `getUser: ${clip(userErr?.message ?? "nil user")}`);
     }
     const userId = userData.user.id;
+    log(traceId, "auth_ok", { userId });
 
     // ---- 2. Parse input ----
     let body: { document_id?: string };
     try {
       body = await req.json();
     } catch (err) {
-      return errorResponse("UNKNOWN_SCAN_ERROR", `bad json: ${(err as Error).message}`);
+      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "bad_json", clip((err as Error).message));
     }
     const documentId = body.document_id;
     if (!documentId || typeof documentId !== "string") {
-      return errorResponse("UNKNOWN_SCAN_ERROR", "missing document_id");
+      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "missing_document_id", "");
     }
+    log(traceId, "input_ok", { documentId });
 
     // ---- 3. Load row (RLS enforced via userClient) ----
     const { data: docRow, error: rowErr } = await userClient
@@ -170,13 +205,16 @@ Deno.serve(withCors(async (req) => {
 
     if (rowErr || !docRow) {
       return errorResponse(
+        traceId,
         "UNKNOWN_SCAN_ERROR",
-        `row lookup: ${rowErr?.message ?? "not found"}`,
+        "row_lookup",
+        clip(rowErr?.message ?? "not found"),
       );
     }
     if (docRow.profile_id !== userId) {
-      return errorResponse("AUTH_EXPIRED", "profile mismatch");
+      return errorResponse(traceId, "AUTH_EXPIRED", "profile_mismatch", "");
     }
+    log(traceId, "row_loaded", { storage_path: docRow.storage_path, status: docRow.status });
 
     // ---- 4. Download file using service role ----
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE, {
@@ -194,20 +232,18 @@ Deno.serve(withCors(async (req) => {
 
     if (dlErr || !fileBlob) {
       await markFailed(adminClient, documentId, `storage_download: ${dlErr?.message}`);
-      return errorResponse("UNKNOWN_SCAN_ERROR", `storage: ${dlErr?.message}`);
+      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "storage_download", clip(dlErr?.message ?? "nil blob"));
     }
 
     const contentType = fileBlob.type || guessContentType(docRow.storage_path);
+    const fileSize = fileBlob.size ?? 0;
+    log(traceId, "file_downloaded", { contentType, fileSize });
 
-    // ---- 4b. Validate file type BEFORE calling the provider ----
-    // The vision endpoint only accepts a fixed set of image MIMEs. Anything
-    // else (PDF, Word doc, video, arbitrary binary) is rejected here with
-    // a clean structured error. The user sees the UNKNOWN_SCAN_ERROR copy
-    // which already tells them to Try Again or enter manually.
-    const validation = validateFileType(contentType, docRow.storage_path, fileBlob.size);
+    // ---- 4b. Validate file type and size BEFORE the provider call ----
+    const validation = validateFileType(contentType, docRow.storage_path, fileSize);
     if (!validation.ok) {
       await markFailed(adminClient, documentId, `unsupported_file_type: ${validation.reason}`);
-      return errorResponse("UNKNOWN_SCAN_ERROR", `unsupported_file_type: ${validation.reason}`);
+      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "validate", clip(validation.reason ?? ""));
     }
 
     const imageDataUrl = await toDataUrl(fileBlob, contentType);
@@ -216,11 +252,12 @@ Deno.serve(withCors(async (req) => {
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openaiKey) {
       await markFailed(adminClient, documentId, "missing OPENAI_API_KEY");
-      return errorResponse("SCAN_TEMPORARILY_UNAVAILABLE", "missing api key");
+      return errorResponse(traceId, "SCAN_TEMPORARILY_UNAVAILABLE", "missing_key", "OPENAI_API_KEY not set");
     }
 
     let raw: string;
     let modelUsed: string;
+    let finishReason: string | null = null;
     try {
       const result = await callOpenAI(openaiKey, {
         model: DEFAULT_MODEL,
@@ -228,38 +265,74 @@ Deno.serve(withCors(async (req) => {
       });
       raw = stripJsonFences(result.content);
       modelUsed = result.model;
+      finishReason = result.finishReason;
+      log(traceId, "openai_ok", {
+        model: modelUsed,
+        finishReason,
+        contentLen: result.content.length,
+        strippedLen: raw.length,
+      });
     } catch (err) {
       const mapped = classifyProviderError(err);
-      await markFailed(adminClient, documentId, `provider: ${(err as Error).message}`);
-      return errorResponse(mapped, (err as Error).message);
+      const anyErr = err as any;
+      const technical = clip(`${anyErr?.status ?? ""} ${anyErr?.message ?? String(err)}`);
+      await markFailed(adminClient, documentId, `provider: ${technical}`);
+      return errorResponse(traceId, mapped, "openai", technical);
     }
 
-    // ---- 6. Parse JSON ----
-    let extracted: Record<string, unknown>;
+    // ---- 6. Parse JSON (resilient) ----
+    // Strategy:
+    //   a) strict JSON.parse
+    //   b) if that fails, try to locate the first balanced {...} object
+    //      in the raw text and parse that
+    //   c) if that also fails, DO NOT error out — persist raw_text with
+    //      status=pending_manual_review so the iOS app shows a blank
+    //      review form with the raw text as reference
+    let extracted: Record<string, unknown> | null = null;
+    let parseStage: "strict" | "salvage" | "fallback" = "strict";
     try {
-      extracted = JSON.parse(raw);
-      if (typeof extracted !== "object" || extracted === null) {
-        throw new Error("top-level value is not an object");
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== "object" || parsed === null) {
+        throw new Error("top-level not object");
       }
-    } catch (err) {
-      await markFailed(
-        adminClient,
-        documentId,
-        `json_parse: ${(err as Error).message}`,
-      );
-      return errorResponse("UNKNOWN_SCAN_ERROR", `parse: ${(err as Error).message}`);
+      extracted = parsed;
+    } catch (_) {
+      // Try to salvage: find the first '{' and last '}' and parse that
+      const first = raw.indexOf("{");
+      const last = raw.lastIndexOf("}");
+      if (first >= 0 && last > first) {
+        try {
+          const salvaged = JSON.parse(raw.slice(first, last + 1));
+          if (typeof salvaged === "object" && salvaged !== null) {
+            extracted = salvaged;
+            parseStage = "salvage";
+          }
+        } catch (_) { /* fall through */ }
+      }
+      if (!extracted) {
+        parseStage = "fallback";
+        log(traceId, "parse_fallback", { rawLen: raw.length, finishReason });
+      }
     }
+
+    const terminalStatus = parseStage === "fallback" ? "pending_manual_review" : "processed";
+    const confidence = parseStage === "fallback"
+      ? "low"
+      : ((extracted?.confidence as string | undefined) ?? "medium");
+    const documentType = parseStage === "fallback"
+      ? "other"
+      : ((extracted?.document_type as string | undefined) ?? "other");
 
     // ---- 7. Persist ----
     const { error: updateErr } = await adminClient
       .from("documents")
       .update({
-        status: "processed",
-        processed: true,
-        extracted_data: extracted,
+        status: terminalStatus === "processed" ? "processed" : "pending",
+        processed: terminalStatus === "processed",
+        extracted_data: extracted ?? {},
         raw_text: raw,
-        confidence: (extracted.confidence as string | undefined) ?? "medium",
-        document_type: (extracted.document_type as string | undefined) ?? "other",
+        confidence,
+        document_type: documentType,
         provider: "openai",
         model: modelUsed,
         retry_count: (docRow.retry_count ?? 0) + (docRow.status === "failed" ? 1 : 0),
@@ -269,21 +342,29 @@ Deno.serve(withCors(async (req) => {
 
     if (updateErr) {
       await markFailed(adminClient, documentId, `db_update: ${updateErr.message}`);
-      return errorResponse("UNKNOWN_SCAN_ERROR", `db: ${updateErr.message}`);
+      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "db_update", clip(updateErr.message));
     }
+
+    const elapsed = Date.now() - t0;
+    log(traceId, "done", { parseStage, terminalStatus, elapsed });
 
     return jsonResponse({
       success: true,
       document_id: documentId,
-      status: "processed",
-      extracted,
+      status: terminalStatus,
+      extracted: extracted ?? {},
       raw_text: raw,
       model: modelUsed,
-      confidence: extracted.confidence ?? "medium",
+      confidence,
+      parse_stage: parseStage,
     });
   } catch (err) {
-    // Top-level safety net. Never leak.
-    return errorResponse("UNKNOWN_SCAN_ERROR", `top-level: ${(err as Error).message}`);
+    return errorResponse(
+      traceId,
+      "UNKNOWN_SCAN_ERROR",
+      "top_level",
+      clip((err as Error).message),
+    );
   }
 }));
 
@@ -299,6 +380,7 @@ interface OpenAICallOptions {
 interface OpenAIResult {
   content: string;
   model: string;
+  finishReason: string | null;
 }
 
 async function callOpenAI(
@@ -317,7 +399,9 @@ async function callOpenAI(
         content: [
           {
             type: "text",
-            text: "Extract all data from this trucking document and return only JSON.",
+            text:
+              "Extract all data from this trucking document and return only valid JSON " +
+              "matching the system prompt schema. Do not include any explanation.",
           },
           {
             type: "image_url",
@@ -326,7 +410,9 @@ async function callOpenAI(
         ],
       },
     ],
-    max_tokens: 1200,
+    // 2048 gives the model room to return the full structured JSON for
+    // complex rate confirmations. 1200 was occasionally truncating.
+    max_tokens: 2048,
     temperature: 0,
     response_format: { type: "json_object" },
   };
@@ -353,8 +439,16 @@ async function callOpenAI(
     const json = await res.json();
     const choice = json.choices?.[0];
     const content = choice?.message?.content;
-    if (!content) throw new Error("empty response from provider");
-    return { content, model: json.model ?? opts.model };
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+      const err = new Error("empty response from provider");
+      (err as any).status = res.status;
+      throw err;
+    }
+    return {
+      content,
+      model: json.model ?? opts.model,
+      finishReason: choice?.finish_reason ?? null,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -366,12 +460,9 @@ function classifyProviderError(err: unknown): ErrorCode {
   const raw: string = (anyErr?.rawBody ?? anyErr?.message ?? "").toString().toLowerCase();
   const name: string = (anyErr?.name ?? "").toString();
 
-  // Abort = timeout.
   if (name === "AbortError" || raw.includes("aborted") || raw.includes("timed out")) {
     return "TIMEOUT";
   }
-
-  // Billing / quota.
   if (
     raw.includes("credit balance") ||
     raw.includes("insufficient_quota") ||
@@ -383,18 +474,12 @@ function classifyProviderError(err: unknown): ErrorCode {
   ) {
     return "SCAN_TEMPORARILY_UNAVAILABLE";
   }
-
-  // Rate limits.
   if (status === 429 || raw.includes("rate limit") || raw.includes("rate_limited")) {
     return "RATE_LIMITED";
   }
-
-  // Auth (provider key invalid).
   if (status === 401 || status === 403 || raw.includes("invalid_api_key")) {
     return "SCAN_TEMPORARILY_UNAVAILABLE";
   }
-
-  // Everything else.
   return "UNKNOWN_SCAN_ERROR";
 }
 
@@ -411,15 +496,13 @@ async function markFailed(client: any, id: string, msg: string): Promise<void> {
 
 async function toDataUrl(blob: Blob, contentType: string): Promise<string> {
   const buf = new Uint8Array(await blob.arrayBuffer());
-  // By the time we reach toDataUrl, validateFileType has already approved
-  // the MIME. Still normalize to a canonical casing for the data URL.
   const safeMime = contentType.toLowerCase();
   const b64 = encodeBase64(buf);
   return `data:${safeMime};base64,${b64}`;
 }
 
 // ----------------------------------------------------------------------------
-// File type validation — enforced BEFORE any provider call.
+// File validation — enforced BEFORE any provider call.
 // ----------------------------------------------------------------------------
 const ALLOWED_MIMES = new Set<string>([
   "image/jpeg",
@@ -435,7 +518,8 @@ const ALLOWED_EXTENSIONS = new Set<string>([
   "jpg", "jpeg", "png", "webp", "gif", "heic", "heif",
 ]);
 
-const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB hard ceiling
+const MIN_FILE_BYTES = 1024;              // 1 KB floor — anything smaller is garbage
+const MAX_FILE_BYTES = 20 * 1024 * 1024;  // 20 MB ceiling — OpenAI's hard limit
 
 interface FileValidationResult {
   ok: boolean;
@@ -447,32 +531,23 @@ function validateFileType(
   storagePath: string,
   size: number,
 ): FileValidationResult {
-  if (size <= 0) {
-    return { ok: false, reason: "empty file" };
-  }
-  if (size > MAX_FILE_BYTES) {
-    return { ok: false, reason: `file too large (${size} bytes)` };
-  }
+  if (size <= 0) return { ok: false, reason: "empty_file" };
+  if (size < MIN_FILE_BYTES) return { ok: false, reason: `too_small:${size}` };
+  if (size > MAX_FILE_BYTES) return { ok: false, reason: `too_large:${size}` };
 
   const mime = (contentType ?? "").toLowerCase().split(";")[0].trim();
   const ext = extensionOf(storagePath);
 
-  // PDFs and non-image types are rejected explicitly.
-  // The iOS client is expected to render PDFs to a JPEG before upload.
   if (mime === "application/pdf" || ext === "pdf") {
-    return { ok: false, reason: "pdf not supported at provider layer" };
+    return { ok: false, reason: "pdf_not_supported_provider" };
   }
 
   const mimeAllowed = ALLOWED_MIMES.has(mime);
   const extAllowed = ALLOWED_EXTENSIONS.has(ext);
 
-  // Accept if either MIME or extension is on the allow-list. Storage can
-  // store a file with an empty Content-Type, in which case the extension
-  // is all we have.
   if (!mimeAllowed && !extAllowed) {
     return { ok: false, reason: `unsupported mime=${mime} ext=${ext}` };
   }
-
   return { ok: true };
 }
 

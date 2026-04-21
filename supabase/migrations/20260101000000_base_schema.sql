@@ -1,6 +1,18 @@
 -- ============================================
--- SACRED PATHWAY DRIVER HUB — FULL DATABASE SCHEMA
--- Safe to run multiple times. Run in Supabase → SQL Editor.
+-- SACRED PATHWAY DRIVER HUB — BASE SCHEMA
+-- ============================================
+-- Creates the 8 core tables (profiles, drivers, loads, expenses,
+-- documents, settlements, brokers, broker_contacts), enables RLS,
+-- installs per-row policies, and wires up the auth.users signup
+-- trigger that auto-creates a profile row for new users.
+--
+-- This migration was originally maintained as supabase_schema_full.sql
+-- at the project root and applied manually via the SQL editor. It has
+-- been moved into the migrations pipeline so that `supabase db push`
+-- can rebuild the schema from zero (staging, CI, fresh dev instances).
+--
+-- Fully idempotent — safe to re-run against an already-initialised DB.
+-- Timestamp predates all feature migrations (April 2026+) so it runs first.
 -- ============================================
 
 -- 1. PROFILES
@@ -198,8 +210,8 @@ CREATE TRIGGER on_auth_user_created
 
 -- ============================================
 -- BACKFILL: create profile rows for existing auth users
--- (The trigger above only fires for NEW signups; your existing
---  user jamie@sacredpathway.org needs a profile row manually.)
+-- (The trigger above only fires for NEW signups; existing users
+--  need a profile row created manually.)
 -- ============================================
 
 INSERT INTO profiles (id)

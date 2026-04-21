@@ -1,6 +1,9 @@
 -- Sacred Pathway Driver Hub
 -- Migration: add pay_type + flat_rate columns to drivers
--- Safe to run multiple times
+--
+-- Originally maintained as supabase_migration_drivers_paytype.sql at
+-- the project root. Moved into the migrations pipeline so
+-- `supabase db push` rebuilds correctly from zero. Fully idempotent.
 
 -- 1. Add columns
 ALTER TABLE drivers
@@ -39,13 +42,3 @@ BEGIN
         CHECK (flat_rate IS NULL OR flat_rate >= 0);
     END IF;
 END $$;
-
--- 5. Verify schema
-SELECT
-    column_name,
-    data_type,
-    column_default
-FROM information_schema.columns
-WHERE table_name = 'drivers'
-AND column_name IN ('pay_type', 'flat_rate')
-ORDER BY column_name;

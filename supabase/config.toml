@@ -4,8 +4,17 @@
 
 project_id = "sacred-pathway"
 
+# verify_jwt = false disables the Supabase gateway's pre-validation of the
+# incoming JWT. This is required after the JWT Signing Keys migration to
+# ES256 — the gateway's legacy HS256-only validator rejects ES256 tokens
+# with "Unsupported JWT algorithm ES256" before the function runs.
+#
+# The function itself re-verifies the token by calling auth.getUser() via
+# supabase-js 2.58.0, which speaks JWKS and handles ES256 properly.
+# Security is preserved: every request is still checked, just inside the
+# function instead of at the gateway.
 [functions.extract-document]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-insights]
-verify_jwt = true
+verify_jwt = false

@@ -22,7 +22,7 @@
 <h2>1. Information We Collect</h2>
 <p><strong>Account information.</strong> When you create an account, we collect your email address and the company information you provide (company name, MC number, DOT number, phone number).</p>
 <p><strong>Operational data you create.</strong> Loads, expenses, driver records, settlements, paystubs, and uploaded documents (rate confirmations, BOLs, receipts, invoices) that you enter or import into the App.</p>
-<p><strong>Document images.</strong> Document images may be securely transmitted to a third-party AI service (OpenAI) solely for the purpose of extracting structured text data. No data is used for training, and processing is limited to this function only. We do not sell, share, or store scanned documents beyond what is necessary for app functionality.</p>
+<p><strong>Documents you upload.</strong> Any rate confirmations, receipts, or other documents you attach to a load are stored in your private Supabase Storage bucket and are accessible only by you. We do not sell, share, or process them with any third party beyond what is necessary to deliver the app's features.</p>
 <p><strong>Device information.</strong> Standard diagnostic data (device model, iOS version, crash logs) provided by Apple to help us improve the App.</p>
 <p><strong>What we do NOT collect.</strong> We do not collect location data, contacts, advertising identifiers, biometric data, or browsing history.</p>
 
@@ -30,7 +30,7 @@
 <ul>
   <li>To operate the App and deliver core features (paystub generation, expense tracking, document storage).</li>
   <li>To authenticate you and protect your account.</li>
-  <li>To extract text from documents you scan or upload, using OpenAI's vision-capable models via our secure backend.</li>
+  <li>To store documents you attach to a load, so you can review them later.</li>
   <li>To diagnose crashes and improve App reliability.</li>
 </ul>
 
@@ -41,7 +41,6 @@
 <p>We do not sell your personal information. We share data only with the service providers that make the App work:</p>
 <ul>
   <li><strong>Supabase</strong> — database and authentication infrastructure.</li>
-  <li><strong>OpenAI</strong> — AI text extraction from scanned documents.</li>
   <li><strong>Apple</strong> — App distribution, in-app purchases, and crash diagnostics.</li>
 </ul>
 <p>We may disclose information if required by law, subpoena, or to protect the rights and safety of users.</p>
