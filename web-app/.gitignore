@@ -8,3 +8,8 @@ node_modules/
 *.log
 out/
 tsconfig.tsbuildinfo
+
+# Editor backups
+*.bak
+*.orig
+*.rej
