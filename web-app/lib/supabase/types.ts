@@ -108,6 +108,19 @@ export interface TruckDocument {
   created_at: ISODate | null;
 }
 
+export type PaystubTheme =
+  | "navy_gold"
+  | "forest_gold"
+  | "black_silver"
+  | "blue_gray";
+
+export const PAYSTUB_THEMES: ReadonlyArray<PaystubTheme> = [
+  "navy_gold",
+  "forest_gold",
+  "black_silver",
+  "blue_gray",
+];
+
 export interface Profile {
   id: UUID;
   company_name: string | null;
@@ -115,6 +128,24 @@ export interface Profile {
   dot_number: string | null;
   phone: string | null;
   subscription_tier: string | null;
+
+  // -- Fee defaults (base schema; iOS owns these too) ----------------------
+  driver_pay_percentage: number | null;
+  dispatcher_fee_percentage: number | null;
+  factoring_fee_percentage: number | null;
+  authority_fee: number | null;
+  maintenance_reserve: number | null;
+  pay_basis: string | null;
+
+  // -- Carrier HQ Phase W4 branding + company columns ----------------------
+  logo_storage_path: string | null;
+  paystub_theme: PaystubTheme | null;
+  paystub_footer_legal: string | null;
+  company_address: string | null;
+  company_city: string | null;
+  company_state: string | null;
+  company_zip: string | null;
+  company_ein: string | null;
 }
 
 // =============================================================================

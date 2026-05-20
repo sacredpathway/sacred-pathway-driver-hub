@@ -1,5 +1,11 @@
 // Top nav for the authenticated app shell. Mobile-first: collapses to a
 // hamburger drawer below the `md` breakpoint.
+//
+// Phase W4 — accepts optional companyName + logoUrl. When the carrier has
+// uploaded a logo on /settings, that image renders in place of the gold
+// "DH" tile. When they've set a company name, it replaces the static
+// "Driver Hub" wordmark. Either / both may be null on a fresh account; the
+// header falls back cleanly.
 
 "use client";
 
@@ -17,19 +23,41 @@ const LINKS: Array<{ href: string; label: string }> = [
   { href: "/broker-contacts",  label: "Broker Contacts" },
   { href: "/expenses",         label: "Expenses"        },
   { href: "/documents",        label: "Documents"       },
+  { href: "/settings",         label: "Settings"        },
 ];
 
-export default function Nav({ email }: { email?: string | null }) {
+export default function Nav({
+  email,
+  companyName,
+  logoUrl,
+}: {
+  email?: string | null;
+  companyName?: string | null;
+  logoUrl?: string | null;
+}) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
+
+  const displayName = companyName?.trim() ? companyName : "Driver Hub";
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/5 bg-sp-background/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="rounded-md bg-sp-gold px-2 py-1 text-xs font-bold text-sp-black">DH</span>
-          <span className="font-semibold tracking-tight text-sp-textPrimary">
-            Driver Hub
+        <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt={companyName ? `${companyName} logo` : "Company logo"}
+              className="h-8 w-8 rounded-md object-contain"
+            />
+          ) : (
+            <span className="rounded-md bg-sp-gold px-2 py-1 text-xs font-bold text-sp-black">
+              DH
+            </span>
+          )}
+          <span className="truncate font-semibold tracking-tight text-sp-textPrimary">
+            {displayName}
           </span>
         </Link>
 
