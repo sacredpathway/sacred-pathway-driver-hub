@@ -35,17 +35,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
+  // print:* utility classes flip the layout into a printer-friendly mode
+  // for the W6 report Print/Save-as-PDF views: nav + footer disappear, the
+  // background goes white, and the main container drops its max-width
+  // padding so the print shell controls the page geometry.
   return (
-    <div className="flex min-h-dvh flex-col bg-sp-background text-sp-textPrimary">
-      <Nav
-        email={user?.email ?? null}
-        companyName={companyName}
-        logoUrl={logoUrl}
-      />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+    <div className="flex min-h-dvh flex-col bg-sp-background text-sp-textPrimary print:bg-white print:text-black">
+      <div className="print:hidden">
+        <Nav
+          email={user?.email ?? null}
+          companyName={companyName}
+          logoUrl={logoUrl}
+        />
+      </div>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 print:max-w-none print:px-0 print:py-0">
         {children}
       </main>
-      <footer className="border-t border-white/5 px-4 py-3 text-center text-xs text-sp-textSecondary">
+      <footer className="border-t border-white/5 px-4 py-3 text-center text-xs text-sp-textSecondary print:hidden">
         {companyName ? `${companyName} · ` : ""}Driver Hub · Sacred Pathway · Cloud Sync dashboard
       </footer>
     </div>

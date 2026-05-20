@@ -23,6 +23,7 @@ const LINKS: Array<{ href: string; label: string }> = [
   { href: "/broker-contacts",  label: "Broker Contacts" },
   { href: "/expenses",         label: "Expenses"        },
   { href: "/documents",        label: "Documents"       },
+  { href: "/reports",          label: "Reports"         },
   { href: "/settings",         label: "Settings"        },
 ];
 

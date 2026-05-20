@@ -23,6 +23,7 @@ const PROTECTED_PREFIXES = [
   "/broker-contacts",
   "/expenses",
   "/documents",
+  "/reports",
   "/settings",
 ];
 
