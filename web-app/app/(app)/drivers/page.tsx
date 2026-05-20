@@ -73,6 +73,7 @@ export default async function DriversPage() {
                 <th className="hidden px-3 py-3 md:table-cell">Phone</th>
                 <th className="hidden px-3 py-3 md:table-cell">Status</th>
                 <th className="px-3 py-3 text-right">Pay</th>
+                <th className="px-3 py-3 text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 bg-sp-card/30">
@@ -97,6 +98,14 @@ export default async function DriversPage() {
                   </td>
                   <td className="px-3 py-3 text-right text-sp-textSecondary">
                     {payDescription(d)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <Link
+                      href={`/drivers/${d.id}/edit`}
+                      className="inline-flex items-center rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-sp-textPrimary hover:bg-white/5"
+                    >
+                      Edit
+                    </Link>
                   </td>
                 </tr>
               ))}
