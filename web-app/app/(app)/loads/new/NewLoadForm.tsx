@@ -9,11 +9,8 @@
 
 import { useActionState } from "react";
 import type { Driver, Truck, Trailer } from "@/lib/supabase/types";
-import {
-  createLoadAction,
-  LOAD_STATUS_OPTIONS,
-  type LoadActionState,
-} from "../actions";
+import { createLoadAction, type LoadActionState } from "../actions";
+import { LOAD_STATUS_OPTIONS } from "../constants";
 
 export default function NewLoadForm({
   drivers,

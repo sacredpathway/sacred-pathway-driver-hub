@@ -10,7 +10,8 @@
 
 import { useActionState, useState } from "react";
 import type { Expense, Load } from "@/lib/supabase/types";
-import { EXPENSE_CATEGORIES, type ExpenseActionState } from "./actions";
+import { type ExpenseActionState } from "./actions";
+import { EXPENSE_CATEGORIES } from "./constants";
 
 type ServerAction = (
   prev: ExpenseActionState | undefined,

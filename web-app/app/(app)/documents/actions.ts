@@ -23,6 +23,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/log";
+import { DOCUMENT_TYPES } from "./constants";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -47,18 +48,6 @@ function maybeUuid(formData: FormData, name: string, label: string): string | nu
   }
   return raw.toLowerCase();
 }
-
-// Document type taxonomy — same labels as the iOS Document Vault picker.
-export const DOCUMENT_TYPES: ReadonlyArray<string> = [
-  "rate_confirmation",
-  "bol",
-  "pod",
-  "invoice",
-  "receipt",
-  "lumper",
-  "settlement",
-  "other",
-] as const;
 
 // MIME allowlist mirrors the iOS uploader: images (camera scans + photos
 // from broker email) and PDFs (forwarded rate cons / invoices).

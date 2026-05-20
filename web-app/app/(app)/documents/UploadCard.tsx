@@ -16,9 +16,9 @@ import { useActionState, useRef, useState } from "react";
 import type { Load } from "@/lib/supabase/types";
 import {
   uploadDocumentsAction,
-  DOCUMENT_TYPES,
   type DocumentActionState,
 } from "./actions";
+import { DOCUMENT_TYPES } from "./constants";
 
 export default function UploadCard({
   loads,

@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/log";
+import { EXPENSE_CATEGORIES } from "./constants";
 
 // -----------------------------------------------------------------------------
 // Validation helpers
@@ -84,25 +85,6 @@ function maybeUuid(formData: FormData, name: string, label: string): string | nu
   }
   return raw.toLowerCase();
 }
-
-// Mirrors iOS AddEditExpenseView's hard-coded picker so the two clients
-// agree on the canonical set. "other" is the catch-all.
-export const EXPENSE_CATEGORIES: ReadonlyArray<string> = [
-  "fuel",
-  "toll",
-  "lumper",
-  "maintenance",
-  "repair",
-  "insurance",
-  "permit",
-  "scale",
-  "parking",
-  "meal",
-  "factoring",
-  "dispatch",
-  "office",
-  "other",
-] as const;
 
 export type ExpenseActionState =
   | { ok: true }

@@ -19,7 +19,7 @@ import { formatDate } from "@/lib/format";
 import type { TruckDocument, Load } from "@/lib/supabase/types";
 import UploadCard from "./UploadCard";
 import DeleteDocButton from "./DeleteDocButton";
-import { DOCUMENT_TYPES } from "./actions";
+import { DOCUMENT_TYPES } from "./constants";
 
 export const runtime = "edge";
 

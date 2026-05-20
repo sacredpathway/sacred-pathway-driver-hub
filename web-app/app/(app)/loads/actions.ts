@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/log";
+import { LOAD_STATUSES } from "./constants";
 
 class FieldError extends Error {
   constructor(public readonly field: string, message: string) {
@@ -72,20 +73,6 @@ function maybeUuid(formData: FormData, name: string, label: string): string | nu
   }
   return raw.toLowerCase();
 }
-
-const LOAD_STATUSES = [
-  "unassigned",
-  "assigned",
-  "in_transit",
-  "delivered",
-  "ready_for_settlement",
-  "settled",
-  "cancelled",
-] as const;
-
-// Exported so the New Load form can render the same option set.
-export const LOAD_STATUS_OPTIONS: ReadonlyArray<(typeof LOAD_STATUSES)[number]> =
-  LOAD_STATUSES;
 
 export type LoadActionState =
   | { ok: true }
