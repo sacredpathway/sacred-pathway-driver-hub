@@ -16,7 +16,7 @@ export const runtime = "edge";
 export default async function FleetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ added?: string }>;
+  searchParams: Promise<{ added?: string; updated?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
@@ -52,6 +52,8 @@ export default async function FleetPage({
 
       {sp.added === "truck" && <FlashOK message="Truck added." />}
       {sp.added === "trailer" && <FlashOK message="Trailer added." />}
+      {sp.updated === "truck" && <FlashOK message="Truck updated." />}
+      {sp.updated === "trailer" && <FlashOK message="Trailer updated." />}
       {(truckErr || trailerErr) && (
         <div className="rounded-lg border border-sp-danger/40 bg-sp-danger/10 p-4 text-sm text-sp-danger">
           {truckErr?.message ?? trailerErr?.message}
@@ -163,6 +165,7 @@ function TruckTable({ trucks }: { trucks: Truck[] }) {
             <th className="hidden px-3 py-3 md:table-cell">Plate</th>
             <th className="px-3 py-3">Status</th>
             <th className="hidden px-3 py-3 md:table-cell">Added</th>
+            <th className="px-3 py-3 text-right"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5 bg-sp-card/30">
@@ -181,6 +184,14 @@ function TruckTable({ trucks }: { trucks: Truck[] }) {
               </td>
               <td className="hidden px-3 py-3 text-sp-textSecondary md:table-cell">
                 {formatDate(t.created_at)}
+              </td>
+              <td className="px-3 py-3 text-right">
+                <Link
+                  href={`/fleet/trucks/${t.id}/edit`}
+                  className="inline-flex items-center rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-sp-textPrimary hover:bg-white/5"
+                >
+                  Edit
+                </Link>
               </td>
             </tr>
           ))}
@@ -202,6 +213,7 @@ function TrailerTable({ trailers }: { trailers: Trailer[] }) {
             <th className="hidden px-3 py-3 md:table-cell">VIN</th>
             <th className="hidden px-3 py-3 md:table-cell">Plate</th>
             <th className="px-3 py-3">Status</th>
+            <th className="px-3 py-3 text-right"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5 bg-sp-card/30">
@@ -218,6 +230,14 @@ function TrailerTable({ trailers }: { trailers: Trailer[] }) {
               </td>
               <td className="px-3 py-3">
                 <StatusPill status={t.status} />
+              </td>
+              <td className="px-3 py-3 text-right">
+                <Link
+                  href={`/fleet/trailers/${t.id}/edit`}
+                  className="inline-flex items-center rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-sp-textPrimary hover:bg-white/5"
+                >
+                  Edit
+                </Link>
               </td>
             </tr>
           ))}

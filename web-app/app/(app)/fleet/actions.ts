@@ -202,3 +202,129 @@ export async function createTrailerAction(
   revalidatePath("/fleet");
   redirect("/fleet?added=trailer");
 }
+
+// =============================================================================
+//  UPDATE TRUCK
+// -----------------------------------------------------------------------------
+//  Edits an existing truck. Validation identical to createTruckAction. RLS +
+//  explicit profile_id guard on the UPDATE prevents cross-user writes even if
+//  a malicious client tampers with the id.
+// =============================================================================
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function updateTruckAction(
+  truckId: string,
+  _prev: FleetActionState | undefined,
+  formData: FormData
+): Promise<FleetActionState> {
+  if (!truckId || !UUID_RE.test(truckId)) {
+    return { ok: false, error: "Missing or invalid truck id." };
+  }
+
+  let payload: {
+    unit_number: string;
+    make: string | null;
+    model: string | null;
+    year: number | null;
+    vin: string | null;
+    plate_number: string | null;
+    state: string | null;
+    status: FleetStatus;
+    notes: string | null;
+  };
+
+  try {
+    const status = enumOrNull(formData, "status", FLEET_STATUSES, "Status");
+    payload = {
+      unit_number: requireStr(formData, "unit_number", "Unit #"),
+      make: s(formData, "make"),
+      model: s(formData, "model"),
+      year: intInRange(formData, "year", 1900, 2100, "Year"),
+      vin: s(formData, "vin"),
+      plate_number: s(formData, "plate_number"),
+      state: stateCode(formData, "state"),
+      status: status ?? "active",
+      notes: s(formData, "notes"),
+    };
+  } catch (e) {
+    if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
+    return { ok: false, error: (e as Error).message };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("trucks")
+    .update(payload)
+    .eq("id", truckId)
+    .eq("profile_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/fleet");
+  revalidatePath(`/fleet/trucks/${truckId}/edit`);
+  redirect(`/fleet?updated=truck`);
+}
+
+// =============================================================================
+//  UPDATE TRAILER
+// =============================================================================
+
+export async function updateTrailerAction(
+  trailerId: string,
+  _prev: FleetActionState | undefined,
+  formData: FormData
+): Promise<FleetActionState> {
+  if (!trailerId || !UUID_RE.test(trailerId)) {
+    return { ok: false, error: "Missing or invalid trailer id." };
+  }
+
+  let payload: {
+    unit_number: string;
+    trailer_type: TrailerType | null;
+    make: string | null;
+    model: string | null;
+    year: number | null;
+    vin: string | null;
+    plate_number: string | null;
+    state: string | null;
+    status: FleetStatus;
+    notes: string | null;
+  };
+
+  try {
+    const status = enumOrNull(formData, "status", FLEET_STATUSES, "Status");
+    payload = {
+      unit_number: requireStr(formData, "unit_number", "Unit #"),
+      trailer_type: enumOrNull(formData, "trailer_type", TRAILER_TYPES, "Trailer type"),
+      make: s(formData, "make"),
+      model: s(formData, "model"),
+      year: intInRange(formData, "year", 1900, 2100, "Year"),
+      vin: s(formData, "vin"),
+      plate_number: s(formData, "plate_number"),
+      state: stateCode(formData, "state"),
+      status: status ?? "active",
+      notes: s(formData, "notes"),
+    };
+  } catch (e) {
+    if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
+    return { ok: false, error: (e as Error).message };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("trailers")
+    .update(payload)
+    .eq("id", trailerId)
+    .eq("profile_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/fleet");
+  revalidatePath(`/fleet/trailers/${trailerId}/edit`);
+  redirect(`/fleet?updated=trailer`);
+}
