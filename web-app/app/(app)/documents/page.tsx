@@ -1,0 +1,102 @@
+import { createClient } from "@/lib/supabase/server";
+import EmptyState from "@/components/EmptyState";
+import { formatDate } from "@/lib/format";
+import type { TruckDocument } from "@/lib/supabase/types";
+
+export const runtime = "edge";
+
+export default async function DocumentsPage() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-sp-danger/40 bg-sp-danger/10 p-4 text-sm text-sp-danger">
+        {error.message}
+      </div>
+    );
+  }
+
+  const documents: TruckDocument[] = (data ?? []) as TruckDocument[];
+  if (documents.length === 0) {
+    return (
+      <EmptyState
+        title="No documents yet"
+        body="Rate confirmations and receipts uploaded from the iPhone app's Document Vault appear here."
+      />
+    );
+  }
+
+  // Pre-sign URLs in parallel — 30-min expiry. Per-row signing keeps the
+  // signed-URL TTL fresh on every page load instead of caching long-lived
+  // ones that could leak across sessions.
+  const links = await Promise.all(
+    documents.map(async (d) => {
+      const { data: signed } = await supabase
+        .storage
+        .from("documents")
+        .createSignedUrl(d.storage_path, 60 * 30);
+      return { id: d.id, url: signed?.signedUrl ?? null };
+    })
+  );
+  const linkMap = new Map(links.map((l) => [l.id, l.url]));
+
+  return (
+    <section className="space-y-4">
+      <header className="flex items-baseline justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
+        <span className="text-xs text-sp-textSecondary">{documents.length} files</span>
+      </header>
+
+      <div className="overflow-x-auto rounded-xl border border-white/5">
+        <table className="min-w-full divide-y divide-white/5 text-sm">
+          <thead className="bg-sp-card text-left text-xs uppercase tracking-wide text-sp-textSecondary">
+            <tr>
+              <th className="px-3 py-3">Type</th>
+              <th className="px-3 py-3">Status</th>
+              <th className="hidden px-3 py-3 md:table-cell">Created</th>
+              <th className="px-3 py-3 text-right">Open</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5 bg-sp-card/30">
+            {documents.map((d) => {
+              const url = linkMap.get(d.id);
+              return (
+                <tr key={d.id} className="hover:bg-white/5">
+                  <td className="px-3 py-3 font-medium text-sp-textPrimary">
+                    {d.document_type ?? "Document"}
+                  </td>
+                  <td className="px-3 py-3 text-sp-textSecondary">{d.status ?? "—"}</td>
+                  <td className="hidden px-3 py-3 text-sp-textSecondary md:table-cell">
+                    {formatDate(d.created_at)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    {url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-md bg-sp-gold/15 px-3 py-1 text-xs font-semibold text-sp-gold hover:bg-sp-gold/25"
+                      >
+                        Open
+                      </a>
+                    ) : (
+                      <span className="text-xs text-sp-textSecondary">unavailable</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-xs text-sp-textSecondary">
+        Document links are signed and expire 30 minutes after page load. Refresh to renew.
+      </p>
+    </section>
+  );
+}

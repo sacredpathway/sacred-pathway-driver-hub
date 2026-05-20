@@ -1,0 +1,15 @@
+# Cloudflare Pages config for driver-hub-web.
+#
+# This file is consumed by `wrangler pages deploy` so secrets and bindings
+# are kept out of your shell history. Update `name` if you pick a
+# different Cloudflare Pages project name.
+
+name = "driver-hub-web"
+compatibility_date = "2024-10-22"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+# NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are NOT set
+# here — they live in the Cloudflare Pages dashboard so we never commit a
+# secret. The runbook in WEB_DEPLOYMENT_RUNBOOK.md walks through adding
+# them via the CF UI.
