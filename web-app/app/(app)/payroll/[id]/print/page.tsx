@@ -4,18 +4,32 @@
 //  One HTML template; two layouts (W2 / 1099). Designed for letter-size print.
 //  Carrier opens this in a new tab → Cmd+P → "Save as PDF" → done.
 //
+//  Phase W8 changes:
+//    • Branding pipeline now pulls every W4 column from profiles:
+//        company_name, mc/dot/ein, address, logo_storage_path,
+//        paystub_theme, paystub_footer_legal.
+//    • Logo (when uploaded) replaces the "DH" tile.
+//    • Theme colors come from PAYSTUB_THEME_COLORS so the navy/forest/black/
+//      blue presets recolor the header bar, totals chips, and net-pay block.
+//    • paystub_footer_legal renders above the generated-by line.
+//    • ?autoprint=1 → fires the browser print dialog on mount. The
+//      "Download PDF" button on /payroll/[id] uses that link so the carrier
+//      lands in the print dialog without an extra click.
+//
 //  Why not Puppeteer/Edge Chromium for true server-side PDF gen?
 //    • Edge runtime chromium binaries are fragile; cold-start ~3s; bundle size.
 //    • Browser print-to-PDF is one click for the carrier and preserves fonts.
-//    • We can layer Puppeteer (Node route) later for emailing PDFs.
-//  Audit trail: the issued paystub row contains all data needed to re-render
-//  identically forever (line items are frozen on issue).
+//    • Cloudflare Browser Rendering is the future path — when it's wired
+//      we can fetch this same URL server-side and save the PDF to storage.
+//      The DOM here was designed to render identically headless.
 // =============================================================================
 
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatDate } from "@/lib/format";
 import PrintButton from "./PrintButton";
+import PrintAutoTrigger from "../../../reports/PrintAutoTrigger";
+import { resolvePaystubColors } from "@/lib/paystubs/themes";
 import type {
   Paystub,
   PaystubEarning,
@@ -30,20 +44,28 @@ export const runtime = "edge";
 
 export default async function PrintPaystubPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ autoprint?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: psRaw }, { data: earnings }, { data: deductions }, { data: taxes }, { data: items }] =
-    await Promise.all([
-      supabase.from("paystubs").select("*").eq("id", id).maybeSingle(),
-      supabase.from("paystub_earnings").select("*").eq("paystub_id", id).order("created_at"),
-      supabase.from("paystub_deductions").select("*").eq("paystub_id", id).order("created_at"),
-      supabase.from("paystub_taxes").select("*").eq("paystub_id", id).order("created_at"),
-      supabase.from("paystub_settlement_items").select("*").eq("paystub_id", id).order("created_at"),
-    ]);
+  const [
+    { data: psRaw },
+    { data: earnings },
+    { data: deductions },
+    { data: taxes },
+    { data: items },
+  ] = await Promise.all([
+    supabase.from("paystubs").select("*").eq("id", id).maybeSingle(),
+    supabase.from("paystub_earnings").select("*").eq("paystub_id", id).order("created_at"),
+    supabase.from("paystub_deductions").select("*").eq("paystub_id", id).order("created_at"),
+    supabase.from("paystub_taxes").select("*").eq("paystub_id", id).order("created_at"),
+    supabase.from("paystub_settlement_items").select("*").eq("paystub_id", id).order("created_at"),
+  ]);
 
   if (!psRaw) notFound();
   const paystub = psRaw as Paystub;
@@ -55,23 +77,61 @@ export default async function PrintPaystubPage({
   const driver = driverRaw as Driver | null;
   const profile = profileRaw as Profile | null;
 
+  // ---- W4 branding resolution ----
+  let logoUrl: string | null = null;
+  if (profile?.logo_storage_path) {
+    const { data: signed } = await supabase
+      .storage
+      .from("branding")
+      .createSignedUrl(profile.logo_storage_path, 60 * 60);
+    logoUrl = signed?.signedUrl ?? null;
+  }
+  const theme = resolvePaystubColors(profile?.paystub_theme ?? null);
+  const footerLegal = profile?.paystub_footer_legal?.trim() ?? "";
+
   const isW2 = paystub.worker_type === "W2";
+  const autoprint = sp.autoprint === "1";
 
   return (
     <>
-      <style>{PRINT_CSS}</style>
+      <style>{buildPrintCss(theme)}</style>
+      {autoprint && <PrintAutoTrigger />}
       <div className="paystub-page">
         <header className="paystub-header">
           <div className="paystub-brand">
-            <div className="brand-mark">DH</div>
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={profile?.company_name ?? "Company logo"}
+                className="brand-logo"
+              />
+            ) : (
+              <div className="brand-mark">DH</div>
+            )}
             <div className="brand-text">
               <div className="brand-company">
                 {profile?.company_name ?? "Sacred Pathway Driver Hub"}
               </div>
               <div className="brand-meta">
-                {profile?.mc_number ? `MC# ${profile.mc_number}` : ""}
-                {profile?.dot_number ? ` · DOT# ${profile.dot_number}` : ""}
+                {[
+                  profile?.mc_number  ? `MC# ${profile.mc_number}` : null,
+                  profile?.dot_number ? `DOT# ${profile.dot_number}` : null,
+                  profile?.company_ein ? `EIN ${profile.company_ein}` : null,
+                ].filter(Boolean).join(" · ")}
               </div>
+              {(profile?.company_address || profile?.company_city) && (
+                <div className="brand-address">
+                  {profile?.company_address}
+                  {profile?.company_address &&
+                    (profile?.company_city || profile?.company_state || profile?.company_zip)
+                    ? " · "
+                    : ""}
+                  {[profile?.company_city, profile?.company_state, profile?.company_zip]
+                    .filter(Boolean)
+                    .join(", ")}
+                </div>
+              )}
             </div>
           </div>
           <div className="paystub-id">
@@ -79,8 +139,13 @@ export default async function PrintPaystubPage({
               {isW2 ? "EMPLOYEE PAYSTUB" : "CONTRACTOR SETTLEMENT"}
             </div>
             <div className="paystub-id-meta">
-              {paystub.paystub_number && <div><strong>#</strong> {paystub.paystub_number}</div>}
-              <div><strong>Period:</strong> {formatDate(paystub.pay_period_start)} – {formatDate(paystub.pay_period_end)}</div>
+              {paystub.paystub_number && (
+                <div><strong>#</strong> {paystub.paystub_number}</div>
+              )}
+              <div>
+                <strong>Period:</strong>{" "}
+                {formatDate(paystub.pay_period_start)} – {formatDate(paystub.pay_period_end)}
+              </div>
               <div><strong>Check Date:</strong> {formatDate(paystub.check_date)}</div>
               <div><strong>Status:</strong> {paystub.status.toUpperCase()}</div>
             </div>
@@ -103,11 +168,19 @@ export default async function PrintPaystubPage({
           <div className="party">
             <div className="party-title">Payer</div>
             <div className="party-name">{profile?.company_name ?? "—"}</div>
+            {profile?.company_address && <div>{profile.company_address}</div>}
+            {(profile?.company_city || profile?.company_state || profile?.company_zip) && (
+              <div>
+                {[profile?.company_city, profile?.company_state, profile?.company_zip]
+                  .filter(Boolean)
+                  .join(", ")}
+              </div>
+            )}
             {profile?.phone && <div>{profile.phone}</div>}
+            {profile?.company_ein && <div>EIN {profile.company_ein}</div>}
           </div>
         </section>
 
-        {/* ---------- W2 layout ---------- */}
         {isW2 ? (
           <W2Body
             earnings={(earnings ?? []) as PaystubEarning[]}
@@ -125,8 +198,16 @@ export default async function PrintPaystubPage({
           />
         )}
 
+        {footerLegal && (
+          <section className="paystub-legal">{footerLegal}</section>
+        )}
+
         <footer className="paystub-footer">
-          <div>Generated by Sacred Pathway Driver Hub · sacredpathway.org</div>
+          <div>
+            Generated by{" "}
+            {profile?.company_name ?? "Sacred Pathway Driver Hub"} ·
+            {" "}sacredpathway.org
+          </div>
           {paystub.status === "draft" && (
             <div className="watermark">DRAFT — NOT YET ISSUED</div>
           )}
@@ -165,7 +246,13 @@ function W2Body({
       <Block title="Earnings">
         <table className="lines">
           <thead>
-            <tr><th>Description</th><th className="r">Hours/Units</th><th className="r">Rate</th><th className="r">This period</th><th className="r">YTD</th></tr>
+            <tr>
+              <th>Description</th>
+              <th className="r">Hours/Units</th>
+              <th className="r">Rate</th>
+              <th className="r">This period</th>
+              <th className="r">YTD</th>
+            </tr>
           </thead>
           <tbody>
             {earnings.map((e) => (
@@ -177,7 +264,11 @@ function W2Body({
                 <td className="r muted">{formatCurrency(e.ytd_amount ?? null)}</td>
               </tr>
             ))}
-            <tr className="subtotal"><td colSpan={3}>Gross earnings</td><td className="r">{formatCurrency(paystub.gross_earnings)}</td><td className="r muted">{formatCurrency(paystub.ytd_gross_earnings)}</td></tr>
+            <tr className="subtotal">
+              <td colSpan={3}>Gross earnings</td>
+              <td className="r">{formatCurrency(paystub.gross_earnings)}</td>
+              <td className="r muted">{formatCurrency(paystub.ytd_gross_earnings)}</td>
+            </tr>
           </tbody>
         </table>
       </Block>
@@ -188,9 +279,17 @@ function W2Body({
             <thead><tr><th>Description</th><th className="r">This period</th><th className="r">YTD</th></tr></thead>
             <tbody>
               {preTaxDed.map((d) => (
-                <tr key={d.id}><td>{d.label}</td><td className="r">−{formatCurrency(d.amount)}</td><td className="r muted">{formatCurrency(d.ytd_amount ?? null)}</td></tr>
+                <tr key={d.id}>
+                  <td>{d.label}</td>
+                  <td className="r">−{formatCurrency(d.amount)}</td>
+                  <td className="r muted">{formatCurrency(d.ytd_amount ?? null)}</td>
+                </tr>
               ))}
-              <tr className="subtotal"><td>Total pre-tax</td><td className="r">−{formatCurrency(paystub.total_pretax_deductions)}</td><td className="r muted">—</td></tr>
+              <tr className="subtotal">
+                <td>Total pre-tax</td>
+                <td className="r">−{formatCurrency(paystub.total_pretax_deductions)}</td>
+                <td className="r muted">—</td>
+              </tr>
             </tbody>
           </table>
         </Block>
@@ -199,7 +298,13 @@ function W2Body({
       <Block title="Tax withholding">
         <table className="lines">
           <thead>
-            <tr><th>Description</th><th>Jurisdiction</th><th className="r">Employee</th><th className="r">Employer</th><th className="r">YTD employee</th></tr>
+            <tr>
+              <th>Description</th>
+              <th>Jurisdiction</th>
+              <th className="r">Employee</th>
+              <th className="r">Employer</th>
+              <th className="r">YTD employee</th>
+            </tr>
           </thead>
           <tbody>
             {taxes.length === 0 && (
@@ -230,9 +335,17 @@ function W2Body({
             <thead><tr><th>Description</th><th className="r">This period</th><th className="r">YTD</th></tr></thead>
             <tbody>
               {postTaxDed.map((d) => (
-                <tr key={d.id}><td>{d.label}</td><td className="r">−{formatCurrency(d.amount)}</td><td className="r muted">{formatCurrency(d.ytd_amount ?? null)}</td></tr>
+                <tr key={d.id}>
+                  <td>{d.label}</td>
+                  <td className="r">−{formatCurrency(d.amount)}</td>
+                  <td className="r muted">{formatCurrency(d.ytd_amount ?? null)}</td>
+                </tr>
               ))}
-              <tr className="subtotal"><td>Total post-tax</td><td className="r">−{formatCurrency(paystub.total_posttax_deductions)}</td><td className="r muted">—</td></tr>
+              <tr className="subtotal">
+                <td>Total post-tax</td>
+                <td className="r">−{formatCurrency(paystub.total_posttax_deductions)}</td>
+                <td className="r muted">—</td>
+              </tr>
             </tbody>
           </table>
         </Block>
@@ -297,7 +410,7 @@ function C1099Body({
         </table>
       </Block>
 
-      {deducts.length > 0 && (
+      {deducts.length + deductions.length > 0 && (
         <Block title="Deductions">
           <table className="lines">
             <thead><tr><th>Description</th><th className="r">Amount</th></tr></thead>
@@ -325,7 +438,10 @@ function C1099Body({
               {adds.map((it) => (
                 <tr key={it.id}><td>{it.label}</td><td className="r">+{formatCurrency(it.amount)}</td></tr>
               ))}
-              <tr className="subtotal"><td>Total add-backs</td><td className="r">+{formatCurrency(paystub.total_reimbursements)}</td></tr>
+              <tr className="subtotal">
+                <td>Total add-backs</td>
+                <td className="r">+{formatCurrency(paystub.total_reimbursements)}</td>
+              </tr>
             </tbody>
           </table>
         </Block>
@@ -338,7 +454,9 @@ function C1099Body({
         </div>
         <div>
           <div className="label">Deductions</div>
-          <div className="value">{formatCurrency((paystub.total_settlement_deductions ?? 0) + (paystub.total_posttax_deductions ?? 0))}</div>
+          <div className="value">
+            {formatCurrency((paystub.total_settlement_deductions ?? 0) + (paystub.total_posttax_deductions ?? 0))}
+          </div>
         </div>
         <div>
           <div className="label">Add-backs</div>
@@ -369,8 +487,25 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-const PRINT_CSS = `
+// =============================================================================
+//  CSS — theme-aware so the picker on /settings/paystub actually changes the
+//  printed paystub. Theme colors flow in via CSS variables on .paystub-page.
+// =============================================================================
+
+function buildPrintCss({
+  primary,
+  accent,
+  accentSoft,
+}: {
+  primary: string;
+  accent: string;
+  accentSoft: string;
+}): string {
+  return `
 .paystub-page {
+  --sp-primary: ${primary};
+  --sp-accent: ${accent};
+  --sp-accent-soft: ${accentSoft};
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #111;
   background: #fff;
@@ -384,24 +519,38 @@ const PRINT_CSS = `
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  border-bottom: 2px solid #111;
+  border-bottom: 3px solid var(--sp-primary);
   padding-bottom: 12px;
   margin-bottom: 16px;
 }
 .paystub-brand { display: flex; gap: 12px; align-items: center; }
 .brand-mark {
-  background: #D4AF37;
-  color: #0A0A0A;
+  background: var(--sp-accent);
+  color: var(--sp-primary);
   font-weight: 700;
   padding: 8px 12px;
   border-radius: 4px;
   font-size: 14pt;
   letter-spacing: 1px;
 }
-.brand-company { font-size: 14pt; font-weight: 700; }
-.brand-meta { font-size: 9pt; color: #555; }
+.brand-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #eee;
+}
+.brand-company { font-size: 14pt; font-weight: 700; color: var(--sp-primary); }
+.brand-meta    { font-size: 9pt; color: #555; }
+.brand-address { font-size: 9pt; color: #555; margin-top: 2px; }
 .paystub-id { text-align: right; }
-.paystub-id-title { font-weight: 700; letter-spacing: 1px; font-size: 12pt; }
+.paystub-id-title {
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 12pt;
+  color: var(--sp-primary);
+}
 .paystub-id-meta { font-size: 9pt; color: #333; margin-top: 4px; }
 .paystub-id-meta div { margin-top: 2px; }
 
@@ -411,7 +560,12 @@ const PRINT_CSS = `
   gap: 24px;
   margin-bottom: 20px;
 }
-.party-title { text-transform: uppercase; letter-spacing: 1px; font-size: 8pt; color: #777; }
+.party-title {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 8pt;
+  color: #777;
+}
 .party-name { font-weight: 700; font-size: 12pt; margin-top: 2px; }
 .party div { margin-top: 2px; font-size: 10pt; }
 
@@ -420,9 +574,11 @@ const PRINT_CSS = `
   text-transform: uppercase;
   letter-spacing: 1px;
   font-size: 9pt;
-  color: #777;
+  color: var(--sp-primary);
   margin: 0 0 6px 0;
-  font-weight: 600;
+  font-weight: 700;
+  border-bottom: 1px solid var(--sp-primary);
+  padding-bottom: 2px;
 }
 table.lines { width: 100%; border-collapse: collapse; }
 table.lines th, table.lines td {
@@ -432,39 +588,67 @@ table.lines th, table.lines td {
   text-align: left;
   vertical-align: top;
 }
-table.lines th { font-size: 8pt; color: #777; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+table.lines th {
+  font-size: 8pt;
+  color: #777;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 table.lines td.r, table.lines th.r { text-align: right; }
-table.lines tr.subtotal td { border-top: 1px solid #111; border-bottom: 0; font-weight: 700; padding-top: 8px; }
+table.lines tr.subtotal td {
+  border-top: 1px solid var(--sp-primary);
+  border-bottom: 0;
+  font-weight: 700;
+  padding-top: 8px;
+}
 .muted { color: #888; }
 
 .netpay {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  background: #fafaf6;
-  border: 1px solid #ddd;
+  background: var(--sp-accent-soft);
+  border: 1px solid var(--sp-accent);
   border-radius: 6px;
   padding: 12px;
   margin-top: 14px;
 }
-.netpay > div .label { font-size: 8pt; color: #777; text-transform: uppercase; letter-spacing: 0.5px; }
+.netpay > div .label {
+  font-size: 8pt;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 .netpay > div .value { font-size: 12pt; font-weight: 700; margin-top: 2px; }
-.netpay > div.big .value { font-size: 18pt; color: #B89020; }
-.netpay > div.big .label { color: #B89020; }
+.netpay > div.big .value { font-size: 18pt; color: var(--sp-primary); }
+.netpay > div.big .label { color: var(--sp-primary); font-weight: 700; }
 
 .footer-meta {
   margin-top: 12px;
   padding: 8px 12px;
-  background: #fafaf6;
-  border: 1px solid #ddd;
+  background: var(--sp-accent-soft);
+  border: 1px solid var(--sp-accent);
   border-radius: 6px;
   display: flex;
   justify-content: space-between;
   font-size: 10pt;
 }
 
+.paystub-legal {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: #fafafa;
+  border-left: 3px solid var(--sp-primary);
+  border-radius: 0 4px 4px 0;
+  font-size: 9pt;
+  color: #444;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .paystub-footer {
-  margin-top: 24px;
+  margin-top: 18px;
   border-top: 1px solid #ddd;
   padding-top: 8px;
   font-size: 8pt;
@@ -495,8 +679,8 @@ table.lines tr.subtotal td { border-top: 1px solid #111; border-bottom: 0; font-
   z-index: 10;
 }
 .print-button {
-  background: #D4AF37;
-  color: #0A0A0A;
+  background: var(--sp-primary);
+  color: #fff;
   border: 0;
   padding: 10px 18px;
   border-radius: 6px;
@@ -520,3 +704,4 @@ table.lines tr.subtotal td { border-top: 1px solid #111; border-bottom: 0; font-
   @page { size: letter; margin: 0.5in; }
 }
 `;
+}

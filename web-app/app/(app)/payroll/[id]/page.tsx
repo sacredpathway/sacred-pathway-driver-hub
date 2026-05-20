@@ -147,11 +147,18 @@ export default async function PaystubDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={paystub.status} />
           <Link
+            href={`/payroll/${paystub.id}/print?autoprint=1`}
+            target="_blank"
+            className="rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
+          >
+            Download PDF
+          </Link>
+          <Link
             href={`/payroll/${paystub.id}/print`}
             target="_blank"
             className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
           >
-            Print / Save PDF
+            Print preview
           </Link>
           <Link href="/payroll" className="text-xs text-sp-textSecondary hover:text-sp-textPrimary">
             ← All paystubs
