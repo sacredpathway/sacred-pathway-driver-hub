@@ -15,6 +15,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/activity/log";
 import type {
   WorkerType,
   EmploymentStatus,
@@ -370,6 +371,17 @@ export async function createDriverAction(
     return { ok: false, error: error.message };
   }
 
+  await logActivity(supabase, user.id, {
+    entityType: "driver",
+    entityId: data.id,
+    action: "created",
+    metadata: {
+      label: `Driver ${payload.name} added (${payload.worker_type})`,
+      driver: payload.name,
+      worker_type: payload.worker_type,
+    },
+  });
+
   revalidatePath("/drivers");
   redirect(`/drivers/${data.id}?created=1`);
 }
@@ -409,6 +421,17 @@ export async function updateDriverAction(
     return { ok: false, error: error.message };
   }
 
+  await logActivity(supabase, user.id, {
+    entityType: "driver",
+    entityId: driverId,
+    action: "updated",
+    metadata: {
+      label: `Driver ${payload.name} updated`,
+      driver: payload.name,
+      worker_type: payload.worker_type,
+    },
+  });
+
   revalidatePath("/drivers");
   revalidatePath(`/drivers/${driverId}`);
   redirect(`/drivers/${driverId}?updated=1`);
@@ -440,6 +463,12 @@ export async function deactivateDriverAction(driverId: string): Promise<void> {
 
   if (error) throw new Error(error.message);
 
+  await logActivity(supabase, user.id, {
+    entityType: "driver",
+    entityId: driverId,
+    action: "deactivated",
+  });
+
   revalidatePath("/drivers");
   revalidatePath(`/drivers/${driverId}`);
 }
@@ -460,6 +489,12 @@ export async function reactivateDriverAction(driverId: string): Promise<void> {
     .eq("profile_id", user.id);
 
   if (error) throw new Error(error.message);
+
+  await logActivity(supabase, user.id, {
+    entityType: "driver",
+    entityId: driverId,
+    action: "reactivated",
+  });
 
   revalidatePath("/drivers");
   revalidatePath(`/drivers/${driverId}`);

@@ -20,6 +20,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { logActivity } from "@/lib/activity/log";
 
 class FieldError extends Error {
   constructor(public readonly field: string, message: string) {
@@ -172,6 +173,13 @@ export async function updateLoadAssignmentAction(
     .eq("profile_id", user.id);
   if (error) return { ok: false, error: error.message };
 
+  await logActivity(supabase, user.id, {
+    entityType: "load",
+    entityId: loadId,
+    action: "assigned",
+    metadata: { truck_id: truckId, trailer_id: trailerId },
+  });
+
   revalidatePath("/loads");
   revalidatePath(`/loads/${loadId}`);
   return { ok: true };
@@ -290,6 +298,17 @@ export async function updateLoadAction(
     .eq("profile_id", user.id);
   if (error) return { ok: false, error: error.message };
 
+  await logActivity(supabase, user.id, {
+    entityType: "load",
+    entityId: loadId,
+    action: "updated",
+    metadata: {
+      label: `Load ${payload.load_number ? `#${payload.load_number}` : loadId.slice(0, 8)} updated${payload.broker_name ? ` (${payload.broker_name})` : ""}`,
+      amount: payload.total_revenue,
+      status: payload.status,
+    },
+  });
+
   revalidatePath("/loads");
   revalidatePath(`/loads/${loadId}`);
   revalidatePath(`/loads/${loadId}/edit`);
@@ -376,6 +395,15 @@ export async function deleteLoadAction(loadId: string): Promise<void> {
   const { error } = await supabase
     .from("loads").delete().eq("id", loadId).eq("profile_id", user.id);
   if (error) throw new Error(error.message);
+
+  await logActivity(supabase, user.id, {
+    entityType: "load",
+    entityId: loadId,
+    action: "deleted",
+    metadata: {
+      label: `Load ${(loadRow as { id: string }).id.slice(0, 8)} deleted`,
+    },
+  });
 
   revalidatePath("/loads");
   redirect("/loads?deleted=1");
@@ -527,6 +555,16 @@ export async function createLoadAction(
     .select("id")
     .single();
   if (error) return { ok: false, error: error.message };
+
+  await logActivity(supabase, user.id, {
+    entityType: "load",
+    entityId: data.id,
+    action: "created",
+    metadata: {
+      label: `Load ${payload.load_number ? `#${payload.load_number}` : data.id.slice(0, 8)} created${payload.broker_name ? ` for ${payload.broker_name}` : ""}`,
+      amount: payload.total_revenue,
+    },
+  });
 
   revalidatePath("/loads");
   revalidatePath("/dashboard");

@@ -25,6 +25,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/activity/log";
 import {
   calculatePaystub,
   seedContractorLines,
@@ -227,6 +228,18 @@ export async function createPaystubAction(
 
   // Recompute totals from inserted lines (cheap — we have them in memory)
   await recomputeAndPersistTotals(supabase, ps.id);
+
+  await logActivity(supabase, user.id, {
+    entityType: "paystub",
+    entityId: ps.id,
+    action: "created",
+    metadata: {
+      label: `Draft paystub created`,
+      driver_id: driverId,
+      period_start: periodStart,
+      period_end: periodEnd,
+    },
+  });
 
   revalidatePath("/payroll");
   redirect(`/payroll/${ps.id}?created=1`);
@@ -888,6 +901,18 @@ export async function issuePaystubAction(paystubId: string): Promise<void> {
   }).eq("id", paystubId).eq("profile_id", user.id);
   if (error) throw new Error(error.message);
 
+  await logActivity(supabase, user.id, {
+    entityType: "paystub",
+    entityId: paystubId,
+    action: "issued",
+    metadata: {
+      label: `Paystub ${paystubNumber} issued`,
+      amount: header.net_pay,
+      driver_id: header.driver_id,
+      paystub_number: paystubNumber,
+    },
+  });
+
   revalidatePath("/payroll");
   revalidatePath(`/payroll/${paystubId}`);
 }
@@ -907,6 +932,12 @@ export async function voidPaystubAction(paystubId: string): Promise<void> {
     .eq("id", paystubId).eq("profile_id", user.id);
   if (error) throw new Error(error.message);
 
+  await logActivity(supabase, user.id, {
+    entityType: "paystub",
+    entityId: paystubId,
+    action: "voided",
+  });
+
   revalidatePath("/payroll");
   revalidatePath(`/payroll/${paystubId}`);
 }
@@ -920,6 +951,12 @@ export async function markPaidAction(paystubId: string): Promise<void> {
   const { error } = await supabase.from("paystubs").update({ status: "paid" })
     .eq("id", paystubId).eq("profile_id", user.id);
   if (error) throw new Error(error.message);
+
+  await logActivity(supabase, user.id, {
+    entityType: "paystub",
+    entityId: paystubId,
+    action: "paid",
+  });
 
   revalidatePath("/payroll");
   revalidatePath(`/payroll/${paystubId}`);
@@ -944,6 +981,12 @@ export async function deleteDraftAction(paystubId: string): Promise<void> {
   const { error } = await supabase.from("paystubs").delete()
     .eq("id", paystubId).eq("profile_id", user.id);
   if (error) throw new Error(error.message);
+
+  await logActivity(supabase, user.id, {
+    entityType: "paystub",
+    entityId: paystubId,
+    action: "deleted",
+  });
 
   revalidatePath("/payroll");
   redirect("/payroll");

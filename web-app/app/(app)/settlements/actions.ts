@@ -25,6 +25,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { logActivity } from "@/lib/activity/log";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -108,6 +109,17 @@ export async function convertLegacySettlementToPaystubAction(
     await supabase.from("paystubs").delete().eq("id", paystub.id).eq("profile_id", user.id);
     throw new Error(linkErr.message);
   }
+
+  await logActivity(supabase, user.id, {
+    entityType: "settlement",
+    entityId: settlementId,
+    action: "converted",
+    metadata: {
+      label: `Legacy settlement converted to draft paystub`,
+      paystub_id: paystub.id,
+      amount: netPay,
+    },
+  });
 
   revalidatePath("/settlements");
   revalidatePath("/payroll");

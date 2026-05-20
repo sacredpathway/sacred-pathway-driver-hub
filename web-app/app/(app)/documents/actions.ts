@@ -22,6 +22,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { logActivity } from "@/lib/activity/log";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -206,6 +207,20 @@ export async function uploadDocumentsAction(
     uploaded += 1;
   }
 
+  if (uploaded > 0) {
+    await logActivity(supabase, user.id, {
+      entityType: "document",
+      entityId: null,
+      action: "uploaded",
+      metadata: {
+        label: `${uploaded} ${uploaded === 1 ? "document" : "documents"} uploaded${docType ? ` (${docType})` : ""}`,
+        count: uploaded,
+        document_type: docType,
+        load_id: loadId,
+      },
+    });
+  }
+
   revalidatePath("/documents");
 
   if (uploaded === 0) {
@@ -256,6 +271,12 @@ export async function deleteDocumentAction(documentId: string): Promise<void> {
     .eq("id", documentId)
     .eq("profile_id", user.id);
   if (error) throw new Error(error.message);
+
+  await logActivity(supabase, user.id, {
+    entityType: "document",
+    entityId: documentId,
+    action: "deleted",
+  });
 
   revalidatePath("/documents");
   redirect("/documents?deleted=1");

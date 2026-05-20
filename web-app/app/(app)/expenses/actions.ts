@@ -17,6 +17,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { logActivity } from "@/lib/activity/log";
 
 // -----------------------------------------------------------------------------
 // Validation helpers
@@ -208,6 +209,17 @@ export async function createExpenseAction(
     .single();
   if (error) return { ok: false, error: error.message };
 
+  await logActivity(supabase, user.id, {
+    entityType: "expense",
+    entityId: data.id,
+    action: "created",
+    metadata: {
+      label: `${payload.category[0].toUpperCase()}${payload.category.slice(1)} expense logged${payload.vendor_name ? ` · ${payload.vendor_name}` : ""}`,
+      amount: payload.amount,
+      category: payload.category,
+    },
+  });
+
   revalidatePath("/expenses");
   revalidatePath("/dashboard");
   redirect(`/expenses/${data.id}?created=1`);
@@ -266,6 +278,17 @@ export async function updateExpenseAction(
     .eq("profile_id", user.id);
   if (error) return { ok: false, error: error.message };
 
+  await logActivity(supabase, user.id, {
+    entityType: "expense",
+    entityId: expenseId,
+    action: "updated",
+    metadata: {
+      label: `Expense updated · ${payload.category}${payload.vendor_name ? ` · ${payload.vendor_name}` : ""}`,
+      amount: payload.amount,
+      category: payload.category,
+    },
+  });
+
   revalidatePath("/expenses");
   revalidatePath(`/expenses/${expenseId}`);
   revalidatePath("/dashboard");
@@ -297,6 +320,12 @@ export async function deleteExpenseAction(expenseId: string): Promise<void> {
     .eq("id", expenseId)
     .eq("profile_id", user.id);
   if (error) throw new Error(error.message);
+
+  await logActivity(supabase, user.id, {
+    entityType: "expense",
+    entityId: expenseId,
+    action: "deleted",
+  });
 
   revalidatePath("/expenses");
   revalidatePath("/dashboard");

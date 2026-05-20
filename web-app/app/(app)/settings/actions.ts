@@ -17,6 +17,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { PAYSTUB_THEMES, type PaystubTheme } from "@/lib/supabase/types";
+import { logActivity } from "@/lib/activity/log";
 
 // -----------------------------------------------------------------------------
 // Validation helpers (same shape as drivers/loads actions)
@@ -131,6 +132,13 @@ export async function updateCompanyProfileAction(
     .eq("id", user.id);
   if (error) return { ok: false, error: error.message };
 
+  await logActivity(supabase, user.id, {
+    entityType: "profile",
+    entityId: user.id,
+    action: "branding_updated",
+    metadata: { label: "Company profile updated" },
+  });
+
   revalidatePath("/settings");
   // Branding (company name) renders in the nav on every page — invalidate
   // the whole tree so the header refreshes immediately.
@@ -193,6 +201,16 @@ export async function updatePaystubPrefsAction(
     .update(payload)
     .eq("id", user.id);
   if (error) return { ok: false, error: error.message };
+
+  await logActivity(supabase, user.id, {
+    entityType: "profile",
+    entityId: user.id,
+    action: "branding_updated",
+    metadata: {
+      label: "Paystub preferences updated",
+      theme: payload.paystub_theme,
+    },
+  });
 
   revalidatePath("/settings/paystub");
   revalidatePath("/settings");
@@ -272,6 +290,13 @@ export async function uploadLogoAction(
     .eq("id", user.id);
   if (dbErr) return { ok: false, error: dbErr.message };
 
+  await logActivity(supabase, user.id, {
+    entityType: "profile",
+    entityId: user.id,
+    action: "logo_uploaded",
+    metadata: { label: "Company logo uploaded" },
+  });
+
   revalidatePath("/settings");
   revalidatePath("/", "layout");
   return { ok: true };
@@ -305,6 +330,13 @@ export async function deleteLogoAction(): Promise<void> {
     .from("profiles")
     .update({ logo_storage_path: null })
     .eq("id", user.id);
+
+  await logActivity(supabase, user.id, {
+    entityType: "profile",
+    entityId: user.id,
+    action: "logo_removed",
+    metadata: { label: "Company logo removed" },
+  });
 
   revalidatePath("/settings");
   revalidatePath("/", "layout");
