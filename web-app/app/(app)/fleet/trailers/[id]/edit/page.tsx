@@ -9,7 +9,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import FleetForm from "../../../FleetForm";
-import { updateTrailerAction } from "../../../actions";
+import DeleteFleetButton from "../../../DeleteFleetButton";
+import { updateTrailerAction, deleteTrailerAction } from "../../../actions";
 import type { Trailer } from "@/lib/supabase/types";
 
 export const runtime = "edge";
@@ -61,6 +62,20 @@ export default async function EditTrailerPage({
         initial={trailer}
         submitLabel="Save changes"
       />
+
+      <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
+        <h2 className="text-base font-semibold text-sp-textPrimary">Danger zone</h2>
+        <p className="mt-1 text-xs text-sp-textSecondary">
+          Archive by setting Status to "Sold" or "Inactive" above — historical
+          load attribution is preserved. Hard delete is refused automatically
+          if any load references this trailer.
+        </p>
+        <div className="mt-3">
+          <form action={deleteTrailerAction.bind(null, trailer.id)}>
+            <DeleteFleetButton kind="trailer" />
+          </form>
+        </div>
+      </section>
     </section>
   );
 }

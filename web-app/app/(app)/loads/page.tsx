@@ -6,7 +6,12 @@ import type { Load, Truck, Trailer } from "@/lib/supabase/types";
 
 export const runtime = "edge";
 
-export default async function LoadsPage() {
+export default async function LoadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
 
   // Pull the loads plus the carrier's fleet so we can render unit numbers
@@ -54,6 +59,12 @@ export default async function LoadsPage() {
         <h1 className="text-2xl font-bold tracking-tight">Loads</h1>
         <span className="text-xs text-sp-textSecondary">{loads.length} total</span>
       </header>
+
+      {sp.deleted && (
+        <div className="rounded-md border border-sp-success/40 bg-sp-success/10 px-3 py-2 text-sm text-sp-success">
+          Load deleted.
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-white/5">
         <table className="min-w-full divide-y divide-white/5 text-sm">

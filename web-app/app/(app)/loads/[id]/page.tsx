@@ -11,7 +11,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import AssignmentForm from "./AssignmentForm";
-import { updateLoadAssignmentAction } from "../actions";
+import DeleteLoadButton from "./DeleteLoadButton";
+import { updateLoadAssignmentAction, deleteLoadAction } from "../actions";
 import type { Load, Truck, Trailer, Driver } from "@/lib/supabase/types";
 
 export const runtime = "edge";
@@ -137,6 +138,20 @@ export default async function LoadDetailPage({
         assignedTrailer={assignedTrailer}
         action={updateLoadAssignmentAction.bind(null, load.id)}
       />
+
+      {/* Danger zone — hard delete, refused if referenced by any paystub. */}
+      <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
+        <h2 className="text-base font-semibold text-sp-textPrimary">Danger zone</h2>
+        <p className="mt-1 text-xs text-sp-textSecondary">
+          Deleting is permanent. Refused automatically if this load is on any
+          paystub (draft, issued, paid, or voided) — history is preserved.
+        </p>
+        <div className="mt-3">
+          <form action={deleteLoadAction.bind(null, load.id)}>
+            <DeleteLoadButton />
+          </form>
+        </div>
+      </section>
     </section>
   );
 }

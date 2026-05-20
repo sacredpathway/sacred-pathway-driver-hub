@@ -328,3 +328,87 @@ export async function updateTrailerAction(
   revalidatePath(`/fleet/trailers/${trailerId}/edit`);
   redirect(`/fleet?updated=trailer`);
 }
+
+// =============================================================================
+//  Safe delete — Truck / Trailer (Phase E5)
+// -----------------------------------------------------------------------------
+//  Two paths supported:
+//
+//    1. Archive (preferred): the existing edit form's Status dropdown can be
+//       set to "Sold" or "Inactive". That keeps the row + all historical
+//       load attribution intact. Loads.truck_id / trailer_id continue to
+//       reference the archived unit.
+//
+//    2. Hard delete (this action): ONLY allowed when NO load references the
+//       unit's id. Loads created by iOS or the web that have ever been
+//       assigned to this unit block the delete with a clear error.
+//
+//  Even if a delete bypassed this check, the FK is ON DELETE SET NULL — loads
+//  would survive — but the carrier almost always wants the historical
+//  attribution intact, so we refuse here.
+// =============================================================================
+
+export async function deleteTruckAction(truckId: string): Promise<void> {
+  if (!truckId || !UUID_RE.test(truckId)) throw new Error("Missing or invalid truck id.");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in.");
+
+  const { data: truckRow } = await supabase
+    .from("trucks").select("id, unit_number").eq("id", truckId).maybeSingle();
+  if (!truckRow) throw new Error("Truck not found.");
+
+  // Reference check — any load.truck_id pointing at this truck?
+  const { data: refs, error: rErr } = await supabase
+    .from("loads")
+    .select("id", { count: "exact", head: false })
+    .eq("truck_id", truckId)
+    .limit(1);
+  if (rErr) throw new Error(rErr.message);
+  if (refs && refs.length > 0) {
+    throw new Error(
+      "This truck is referenced by historical loads. " +
+      "Archive it by setting Status to 'Sold' or 'Inactive' instead of deleting."
+    );
+  }
+
+  const { error } = await supabase
+    .from("trucks").delete().eq("id", truckId).eq("profile_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/fleet");
+  redirect("/fleet?deleted=truck");
+}
+
+export async function deleteTrailerAction(trailerId: string): Promise<void> {
+  if (!trailerId || !UUID_RE.test(trailerId)) throw new Error("Missing or invalid trailer id.");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in.");
+
+  const { data: trailerRow } = await supabase
+    .from("trailers").select("id, unit_number").eq("id", trailerId).maybeSingle();
+  if (!trailerRow) throw new Error("Trailer not found.");
+
+  const { data: refs, error: rErr } = await supabase
+    .from("loads")
+    .select("id", { count: "exact", head: false })
+    .eq("trailer_id", trailerId)
+    .limit(1);
+  if (rErr) throw new Error(rErr.message);
+  if (refs && refs.length > 0) {
+    throw new Error(
+      "This trailer is referenced by historical loads. " +
+      "Archive it by setting Status to 'Sold' or 'Inactive' instead of deleting."
+    );
+  }
+
+  const { error } = await supabase
+    .from("trailers").delete().eq("id", trailerId).eq("profile_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/fleet");
+  redirect("/fleet?deleted=trailer");
+}

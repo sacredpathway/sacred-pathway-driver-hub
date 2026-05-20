@@ -16,7 +16,7 @@ export const runtime = "edge";
 export default async function FleetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ added?: string; updated?: string }>;
+  searchParams: Promise<{ added?: string; updated?: string; deleted?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
@@ -54,6 +54,8 @@ export default async function FleetPage({
       {sp.added === "trailer" && <FlashOK message="Trailer added." />}
       {sp.updated === "truck" && <FlashOK message="Truck updated." />}
       {sp.updated === "trailer" && <FlashOK message="Trailer updated." />}
+      {sp.deleted === "truck" && <FlashOK message="Truck deleted." />}
+      {sp.deleted === "trailer" && <FlashOK message="Trailer deleted." />}
       {(truckErr || trailerErr) && (
         <div className="rounded-lg border border-sp-danger/40 bg-sp-danger/10 p-4 text-sm text-sp-danger">
           {truckErr?.message ?? trailerErr?.message}

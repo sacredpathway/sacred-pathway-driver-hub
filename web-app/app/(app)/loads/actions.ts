@@ -291,3 +291,88 @@ export async function updateLoadAction(
   revalidatePath(`/loads/${loadId}/edit`);
   redirect(`/loads/${loadId}?updated=1`);
 }
+
+// =============================================================================
+//  Safely delete a load (Phase E5)
+// -----------------------------------------------------------------------------
+//  Rules:
+//    • Refuse if the load is referenced by any paystub_earnings.load_id or
+//      paystub_settlement_items.load_id whose parent paystub is in a locked
+//      status (issued | paid | voided). Those rows are immutable history.
+//    • If only referenced by DRAFT paystubs, also refuse — the carrier should
+//      remove the row from the draft first (transparency over silent breakage).
+//    • Otherwise hard delete is allowed.
+//
+//  We do NOT mark loads inactive — the iOS app + accounting workflows expect
+//  loads to either exist or not. Truncating to a soft-delete column here
+//  would be schema drift versus iOS.
+// =============================================================================
+
+export async function deleteLoadAction(loadId: string): Promise<void> {
+  if (!loadId || !UUID_RE.test(loadId)) throw new Error("Missing or invalid load id.");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in.");
+
+  // Ownership + existence (RLS will silently filter cross-user attempts)
+  const { data: loadRow } = await supabase
+    .from("loads").select("id").eq("id", loadId).maybeSingle();
+  if (!loadRow) throw new Error("Load not found.");
+
+  // Reference check — paystub_earnings
+  const { data: earningRefs, error: eErr } = await supabase
+    .from("paystub_earnings")
+    .select("paystub_id, paystubs!inner(status)")
+    .eq("load_id", loadId);
+  if (eErr) throw new Error(eErr.message);
+
+  // Reference check — paystub_settlement_items
+  const { data: settlementRefs, error: sErr } = await supabase
+    .from("paystub_settlement_items")
+    .select("paystub_id, paystubs!inner(status)")
+    .eq("load_id", loadId);
+  if (sErr) throw new Error(sErr.message);
+
+  // Type-safe inspection of the joined paystub status field
+  type StatusRef = { paystub_id: string; paystubs: { status: string } | { status: string }[] };
+  const allRefs: StatusRef[] = [
+    ...((earningRefs ?? []) as StatusRef[]),
+    ...((settlementRefs ?? []) as StatusRef[]),
+  ];
+
+  function statusOf(r: StatusRef): string | null {
+    const p = r.paystubs;
+    if (Array.isArray(p)) return p[0]?.status ?? null;
+    return p?.status ?? null;
+  }
+
+  const lockedRefs = allRefs.filter((r) => {
+    const s = statusOf(r);
+    return s === "issued" || s === "paid" || s === "voided";
+  });
+  if (lockedRefs.length > 0) {
+    throw new Error(
+      "This load is on " + lockedRefs.length +
+      " issued, paid, or voided paystub line item(s). " +
+      "Locked paystubs preserve their history — the load can't be deleted."
+    );
+  }
+
+  const draftRefs = allRefs.filter((r) => statusOf(r) === "draft");
+  if (draftRefs.length > 0) {
+    throw new Error(
+      "This load is attached to " + draftRefs.length +
+      " draft paystub line item(s). Remove it from the draft(s) first, " +
+      "then try deleting the load again."
+    );
+  }
+
+  // Safe to delete.
+  const { error } = await supabase
+    .from("loads").delete().eq("id", loadId).eq("profile_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/loads");
+  redirect("/loads?deleted=1");
+}
