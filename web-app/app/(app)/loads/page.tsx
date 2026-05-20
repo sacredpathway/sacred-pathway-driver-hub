@@ -67,6 +67,7 @@ export default async function LoadsPage() {
               <th className="px-3 py-3">Trailer</th>
               <th className="px-3 py-3 text-right">Miles</th>
               <th className="px-3 py-3 text-right">Revenue</th>
+              <th className="px-3 py-3 text-right"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5 bg-sp-card/30">
@@ -100,6 +101,14 @@ export default async function LoadsPage() {
                   </td>
                   <td className="px-3 py-3 text-right font-semibold text-sp-gold">
                     {formatCurrency(l.total_revenue)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <Link
+                      href={`/loads/${l.id}/edit`}
+                      className="inline-flex items-center rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-sp-textPrimary hover:bg-white/5"
+                    >
+                      Edit
+                    </Link>
                   </td>
                 </tr>
               );

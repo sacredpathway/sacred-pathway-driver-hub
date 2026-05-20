@@ -18,10 +18,13 @@ export const runtime = "edge";
 
 export default async function LoadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ updated?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const supabase = await createClient();
 
   const { data: loadRaw, error } = await supabase
@@ -86,10 +89,24 @@ export default async function LoadDetailPage({
             {load.broker_name ? ` · ${load.broker_name}` : ""}
           </p>
         </div>
-        <Link href="/loads" className="text-xs text-sp-textSecondary hover:text-sp-textPrimary">
-          ← All loads
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/loads/${load.id}/edit`}
+            className="rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
+          >
+            Edit
+          </Link>
+          <Link href="/loads" className="text-xs text-sp-textSecondary hover:text-sp-textPrimary">
+            ← All loads
+          </Link>
+        </div>
       </header>
+
+      {sp.updated && (
+        <div className="rounded-md border border-sp-success/40 bg-sp-success/10 px-3 py-2 text-sm text-sp-success">
+          Load updated.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Tile label="Revenue" value={formatCurrency(load.total_revenue)} tone="gold" />

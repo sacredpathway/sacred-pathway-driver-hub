@@ -19,6 +19,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 class FieldError extends Error {
   constructor(public readonly field: string, message: string) {
@@ -33,6 +34,33 @@ function s(formData: FormData, name: string): string | null {
   return t === "" ? null : t;
 }
 
+function num(
+  formData: FormData,
+  name: string,
+  opts?: { nonNegative?: boolean; label?: string }
+): number | null {
+  const raw = s(formData, name);
+  if (raw === null) return null;
+  const cleaned = raw.replace(/[$,%\s]/g, "");
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) {
+    throw new FieldError(name, `${opts?.label ?? name} must be a number.`);
+  }
+  if (opts?.nonNegative && n < 0) {
+    throw new FieldError(name, `${opts?.label ?? name} cannot be negative.`);
+  }
+  return n;
+}
+
+function date(formData: FormData, name: string): string | null {
+  const raw = s(formData, name);
+  if (!raw) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    throw new FieldError(name, "Date must be YYYY-MM-DD.");
+  }
+  return raw;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function maybeUuid(formData: FormData, name: string, label: string): string | null {
@@ -43,6 +71,16 @@ function maybeUuid(formData: FormData, name: string, label: string): string | nu
   }
   return raw.toLowerCase();
 }
+
+const LOAD_STATUSES = [
+  "unassigned",
+  "assigned",
+  "in_transit",
+  "delivered",
+  "ready_for_settlement",
+  "settled",
+  "cancelled",
+] as const;
 
 export type LoadActionState =
   | { ok: true }
@@ -133,4 +171,123 @@ export async function updateLoadAssignmentAction(
   revalidatePath("/loads");
   revalidatePath(`/loads/${loadId}`);
   return { ok: true };
+}
+
+// =============================================================================
+//  Update FULL load — broker / route / dates / miles / revenue / status /
+//  notes / truck / trailer. Preserves the same ownership re-checks the
+//  assignment-only action uses, and explicitly allows unassign (truck_id /
+//  trailer_id → NULL).
+// =============================================================================
+
+export async function updateLoadAction(
+  loadId: string,
+  _prev: LoadActionState | undefined,
+  formData: FormData
+): Promise<LoadActionState> {
+  if (!loadId || !UUID_RE.test(loadId)) {
+    return { ok: false, error: "Missing or invalid load id." };
+  }
+
+  let payload: {
+    load_number: string | null;
+    broker_name: string | null;
+    broker_mc_number: string | null;
+    origin: string | null;
+    destination: string | null;
+    pickup_date: string | null;
+    delivery_date: string | null;
+    total_miles: number | null;
+    line_haul_rate: number | null;
+    fuel_surcharge: number | null;
+    accessorial_charges: number | null;
+    total_revenue: number | null;
+    status: string | null;
+    truck_id: string | null;
+    trailer_id: string | null;
+  };
+
+  let truckId: string | null;
+  let trailerId: string | null;
+
+  try {
+    const statusRaw = s(formData, "status");
+    if (statusRaw && !(LOAD_STATUSES as ReadonlyArray<string>).includes(statusRaw)) {
+      throw new FieldError(
+        "status",
+        `Status must be one of: ${LOAD_STATUSES.join(", ")}.`
+      );
+    }
+    truckId = maybeUuid(formData, "truck_id", "Truck");
+    trailerId = maybeUuid(formData, "trailer_id", "Trailer");
+
+    payload = {
+      load_number:        s(formData, "load_number"),
+      broker_name:        s(formData, "broker_name"),
+      broker_mc_number:   s(formData, "broker_mc_number"),
+      origin:             s(formData, "origin"),
+      destination:        s(formData, "destination"),
+      pickup_date:        date(formData, "pickup_date"),
+      delivery_date:      date(formData, "delivery_date"),
+      total_miles:        num(formData, "total_miles", { nonNegative: true, label: "Miles" }),
+      line_haul_rate:     num(formData, "line_haul_rate", { nonNegative: true, label: "Line haul" }),
+      fuel_surcharge:     num(formData, "fuel_surcharge", { nonNegative: true, label: "Fuel surcharge" }),
+      accessorial_charges: num(formData, "accessorial_charges", { nonNegative: true, label: "Accessorials" }),
+      total_revenue:      num(formData, "total_revenue", { nonNegative: true, label: "Total revenue" }),
+      status:             statusRaw,
+      truck_id:           truckId,
+      trailer_id:         trailerId,
+    };
+  } catch (e) {
+    if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
+    return { ok: false, error: (e as Error).message };
+  }
+
+  // Cross-field rule: if pickup AND delivery both set, delivery must be on/after pickup.
+  if (payload.pickup_date && payload.delivery_date &&
+      new Date(payload.delivery_date) < new Date(payload.pickup_date)) {
+    return {
+      ok: false,
+      error: "Delivery date must be on or after pickup date.",
+      field: "delivery_date",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // ---- Verify the load belongs to the user (RLS-backed) ----------------
+  const { data: loadRow, error: loadErr } = await supabase
+    .from("loads")
+    .select("id")
+    .eq("id", loadId)
+    .maybeSingle();
+  if (loadErr) return { ok: false, error: loadErr.message };
+  if (!loadRow) return { ok: false, error: "Load not found." };
+
+  // ---- Re-verify truck / trailer ownership when assigning -------------
+  if (truckId) {
+    const { data: t } = await supabase
+      .from("trucks").select("id").eq("id", truckId).maybeSingle();
+    if (!t) return { ok: false, error: "Selected truck isn't in your fleet.", field: "truck_id" };
+  }
+  if (trailerId) {
+    const { data: tr } = await supabase
+      .from("trailers").select("id").eq("id", trailerId).maybeSingle();
+    if (!tr) return { ok: false, error: "Selected trailer isn't in your fleet.", field: "trailer_id" };
+  }
+
+  // ---- Persist ---------------------------------------------------------
+  const { error } = await supabase
+    .from("loads")
+    .update(payload)
+    .eq("id", loadId)
+    .eq("profile_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/loads");
+  revalidatePath(`/loads/${loadId}`);
+  revalidatePath(`/loads/${loadId}/edit`);
+  redirect(`/loads/${loadId}?updated=1`);
 }
