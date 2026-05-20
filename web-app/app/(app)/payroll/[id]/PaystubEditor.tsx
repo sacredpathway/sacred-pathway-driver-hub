@@ -18,12 +18,13 @@
 //  always fresh after each add/remove.
 // =============================================================================
 
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import {
   addEarning,
   addDeduction,
   addTax,
   addSettlementItem,
+  addLoadToDraft,
   removeLineAction,
 } from "../actions";
 import type {
@@ -35,6 +36,17 @@ import type {
   PaystubSettlementItem,
 } from "@/lib/supabase/types";
 
+interface EligibleLoad {
+  id: string;
+  load_number: string | null;
+  broker_name: string | null;
+  origin: string | null;
+  destination: string | null;
+  pickup_date: string | null;
+  total_miles: number | null;
+  total_revenue: number | null;
+}
+
 interface Props {
   paystub: Paystub;
   driver: Driver | null;
@@ -43,6 +55,8 @@ interface Props {
   taxes: PaystubTax[];
   settlementItems: PaystubSettlementItem[];
   editable: boolean;
+  /** 1099 only. Loads in the paystub's pay period not yet attached. */
+  eligibleLoads?: EligibleLoad[];
 }
 
 export default function PaystubEditor({
@@ -53,6 +67,7 @@ export default function PaystubEditor({
   taxes,
   settlementItems,
   editable,
+  eligibleLoads,
 }: Props) {
   const isW2 = paystub.worker_type === "W2";
 
@@ -72,6 +87,11 @@ export default function PaystubEditor({
           paystubId={paystub.id}
           editable={editable}
         />
+        {/* 1099 + draft: dedicated "Add load" picker that seeds a
+            settlement_gross row from a real load's total_revenue. */}
+        {editable && !isW2 && eligibleLoads && eligibleLoads.length > 0 && (
+          <AddLoadForm paystubId={paystub.id} loads={eligibleLoads} />
+        )}
         {editable && (
           <AddEarningForm
             paystubId={paystub.id}
@@ -149,6 +169,68 @@ function SectionCard({
       <div className="space-y-3">{children}</div>
     </section>
   );
+}
+
+// =============================================================================
+//  Add-load form (1099 draft only)
+// -----------------------------------------------------------------------------
+//  Server-component form. The carrier picks one load from the dropdown and
+//  clicks Add. The action seeds a settlement_gross earnings row with the
+//  load's gross revenue, and recomputes totals. Loads already on this paystub
+//  are not present in the list (filtered server-side on the parent route).
+// =============================================================================
+
+function AddLoadForm({
+  paystubId,
+  loads,
+}: {
+  paystubId: string;
+  loads: EligibleLoad[];
+}) {
+  return (
+    <form
+      action={addLoadToDraft.bind(null, paystubId)}
+      className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-white/10 p-3 md:grid-cols-[1fr_auto]"
+    >
+      <label className="block">
+        <span className="block text-[10px] font-semibold uppercase tracking-wide text-sp-textSecondary">
+          Add a load from this period
+        </span>
+        <select
+          name="load_id"
+          defaultValue=""
+          required
+          className="mt-1 w-full rounded-md border border-white/10 bg-sp-background px-3 py-2 text-xs text-sp-textPrimary focus:border-sp-gold focus:outline-none"
+        >
+          <option value="" disabled>
+            — Pick a load —
+          </option>
+          {loads.map((l) => (
+            <option key={l.id} value={l.id}>
+              {loadOptionLabel(l)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="submit"
+        className="self-end rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
+      >
+        Add load
+      </button>
+    </form>
+  );
+}
+
+function loadOptionLabel(l: EligibleLoad): string {
+  const parts: string[] = [];
+  if (l.load_number) parts.push(`#${l.load_number}`);
+  if (l.broker_name) parts.push(l.broker_name);
+  const route = [l.origin, l.destination].filter(Boolean).join(" → ");
+  if (route) parts.push(route);
+  if (l.pickup_date) parts.push(formatDate(l.pickup_date));
+  if (l.total_revenue != null) parts.push(formatCurrency(l.total_revenue));
+  return parts.join("  ·  ") || "Load";
 }
 
 // =============================================================================

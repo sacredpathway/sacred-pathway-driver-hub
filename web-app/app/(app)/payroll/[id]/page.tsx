@@ -71,6 +71,66 @@ export default async function PaystubDetailPage({
 
   const editable = paystub.status === "draft";
 
+  // Eligible loads for "Add load to draft" — only fetched in the edit case to
+  // keep the read-only view minimal. Filter: this driver's loads in the
+  // paystub's pay period that aren't already attached to this paystub.
+  let eligibleLoads: Array<{
+    id: string;
+    load_number: string | null;
+    broker_name: string | null;
+    origin: string | null;
+    destination: string | null;
+    pickup_date: string | null;
+    total_miles: number | null;
+    total_revenue: number | null;
+  }> = [];
+  if (editable && paystub.worker_type === "1099") {
+    const attachedLoadIds = (earnings ?? [])
+      .map((e: { load_id: string | null }) => e.load_id)
+      .filter((x): x is string => !!x);
+
+    let q = supabase
+      .from("loads")
+      .select("id, load_number, broker_name, origin, destination, pickup_date, total_miles, total_revenue, driver_id, delivery_date, status")
+      .or(`driver_id.is.null,driver_id.eq.${paystub.driver_id}`)
+      .order("pickup_date", { ascending: false, nullsFirst: false });
+    if (attachedLoadIds.length > 0) {
+      q = q.not("id", "in", `(${attachedLoadIds.join(",")})`);
+    }
+    const { data: loadsRaw } = await q;
+    eligibleLoads = ((loadsRaw ?? []) as Array<{
+      id: string;
+      load_number: string | null;
+      broker_name: string | null;
+      origin: string | null;
+      destination: string | null;
+      pickup_date: string | null;
+      delivery_date: string | null;
+      total_miles: number | null;
+      total_revenue: number | null;
+      driver_id: string | null;
+      status: string | null;
+    }>)
+      .filter((l) => {
+        const ref = l.delivery_date ?? l.pickup_date;
+        if (!ref) return true;
+        return (
+          ref >= paystub.pay_period_start && ref <= paystub.pay_period_end
+        );
+      })
+      .filter((l) => l.status !== "settled")
+      .map((l) => ({
+        id: l.id,
+        load_number: l.load_number,
+        broker_name: l.broker_name,
+        origin: l.origin,
+        destination: l.destination,
+        pickup_date: l.pickup_date,
+        total_miles: l.total_miles,
+        total_revenue: l.total_revenue,
+      }));
+  }
+
   return (
     <section className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -105,6 +165,29 @@ export default async function PaystubDetailPage({
         </div>
       )}
 
+      {/* Locked-state banners — visible whenever the paystub isn't a draft. */}
+      {paystub.status === "issued" && (
+        <LockedBanner
+          tone="info"
+          title="Paystub issued — line items locked."
+          body="YTD totals are snapshotted and the paystub number is assigned. To change anything, Void this paystub and create a new draft."
+        />
+      )}
+      {paystub.status === "paid" && (
+        <LockedBanner
+          tone="success"
+          title="Paystub marked paid — line items locked."
+          body="The driver has been recorded as paid. To reverse, Void this paystub (preserves audit history)."
+        />
+      )}
+      {paystub.status === "voided" && (
+        <LockedBanner
+          tone="danger"
+          title="Paystub voided."
+          body="This paystub is preserved for audit but no longer counts toward driver YTD totals."
+        />
+      )}
+
       {/* Totals — read-only summary */}
       <SummaryCard paystub={paystub} />
 
@@ -126,6 +209,7 @@ export default async function PaystubDetailPage({
         taxes={(taxes ?? []) as PaystubTax[]}
         settlementItems={(items ?? []) as PaystubSettlementItem[]}
         editable={editable}
+        eligibleLoads={eligibleLoads}
       />
 
       {/* External-link card — Carrier HQ prepares records, Gusto runs payroll. */}
@@ -247,6 +331,27 @@ function Tile({
     <div className="rounded-xl border border-white/5 bg-sp-card p-4">
       <div className="text-xs font-semibold uppercase tracking-wide text-sp-textSecondary">{label}</div>
       <div className={`mt-1 text-xl font-bold tracking-tight ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
+function LockedBanner({
+  tone,
+  title,
+  body,
+}: {
+  tone: "info" | "success" | "danger";
+  title: string;
+  body: string;
+}) {
+  const cls =
+    tone === "success" ? "border-sp-success/40 bg-sp-success/10 text-sp-success"
+    : tone === "danger" ? "border-sp-danger/40 bg-sp-danger/10 text-sp-danger"
+    : "border-white/20 bg-white/5 text-sp-textPrimary";
+  return (
+    <div className={`rounded-md border px-3 py-2 text-sm ${cls}`}>
+      <strong className="block">{title}</strong>
+      <span className="mt-0.5 block text-xs opacity-90">{body}</span>
     </div>
   );
 }

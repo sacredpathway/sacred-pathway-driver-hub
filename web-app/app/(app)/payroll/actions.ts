@@ -539,6 +539,100 @@ export async function addSettlementItemAction(
 }
 
 // =============================================================================
+//  Add a LOAD to an existing draft paystub (1099 only)
+// -----------------------------------------------------------------------------
+//  Phase E4. Carrier picks loads at creation time on /payroll/new, but
+//  sometimes a load is added later (broker re-bills, post-trip detention,
+//  forgotten load). This action seeds one earnings row of kind
+//  'settlement_gross' tied to load_id with the load's total_revenue.
+//
+//  Guards:
+//    • draft only
+//    • 1099 only (W2 paystubs don't carry settlement_gross lines)
+//    • load must belong to the carrier (RLS-backed)
+//    • load must not already be attached to this same paystub
+// =============================================================================
+
+export async function addLoadToDraftAction(
+  paystubId: string,
+  _prev: PaystubActionState | undefined,
+  formData: FormData
+): Promise<PaystubActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  let loadId: string;
+  try {
+    const raw = s(formData, "load_id");
+    if (!raw) throw new FieldError("load_id", "Pick a load to add.");
+    loadId = raw;
+
+    const { worker_type } = await assertEditable(supabase, paystubId);
+    if (worker_type !== "1099") {
+      throw new FieldError(
+        "paystub_id",
+        "Adding a load is a 1099 contractor settlement action. W2 paystubs use manual earnings rows."
+      );
+    }
+
+    // Load ownership + payload
+    const { data: load, error: lErr } = await supabase
+      .from("loads")
+      .select("id, load_number, origin, destination, total_revenue, total_miles")
+      .eq("id", loadId)
+      .maybeSingle();
+    if (lErr) return { ok: false, error: lErr.message };
+    if (!load) {
+      return { ok: false, error: "Load not found or not in your account.", field: "load_id" };
+    }
+
+    // Already on this paystub?
+    const { data: existing } = await supabase
+      .from("paystub_earnings")
+      .select("id")
+      .eq("paystub_id", paystubId)
+      .eq("load_id", loadId)
+      .maybeSingle();
+    if (existing) {
+      return {
+        ok: false,
+        error: "This load is already on the draft. Remove it first if you want to re-add it.",
+        field: "load_id",
+      };
+    }
+
+    const route = [load.origin, load.destination].filter(Boolean).join(" → ");
+    const label =
+      load.load_number && route ? `Load #${load.load_number}  ${route}`
+      : load.load_number          ? `Load #${load.load_number}`
+      : route                     ? route
+      : "Load";
+
+    const { error } = await supabase.from("paystub_earnings").insert({
+      paystub_id: paystubId,
+      profile_id: user.id,
+      kind: "settlement_gross",
+      label,
+      amount: r2(load.total_revenue ?? 0),
+      is_taxable: true,
+      hours: null,
+      units: load.total_miles,
+      rate: null,
+      load_id: load.id,
+    });
+    if (error) return { ok: false, error: error.message };
+  } catch (e) {
+    if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
+    return { ok: false, error: (e as Error).message };
+  }
+
+  await recomputeAndPersistTotals(supabase, paystubId);
+  revalidatePath(`/payroll/${paystubId}`);
+  return { ok: true };
+}
+
+// =============================================================================
 //  Update header (payment_method / check_number / notes) — DRAFT ONLY
 // -----------------------------------------------------------------------------
 //  Phase W3 step 1. Period dates are NOT editable here on purpose — they were
@@ -641,6 +735,10 @@ export async function addTax(paystubId: string, formData: FormData): Promise<voi
 }
 export async function addSettlementItem(paystubId: string, formData: FormData): Promise<void> {
   const r = await addSettlementItemAction(paystubId, undefined, formData);
+  if (!r.ok) throw new Error(r.error);
+}
+export async function addLoadToDraft(paystubId: string, formData: FormData): Promise<void> {
+  const r = await addLoadToDraftAction(paystubId, undefined, formData);
   if (!r.ok) throw new Error(r.error);
 }
 
