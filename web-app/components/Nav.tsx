@@ -18,6 +18,7 @@ const LINKS: Array<{ href: string; label: string }> = [
   { href: "/loads",            label: "Loads"           },
   { href: "/drivers",          label: "Drivers"         },
   { href: "/payroll",          label: "Payroll"         },
+  { href: "/settlements",      label: "Settlements"     },
   { href: "/fleet",            label: "Fleet"           },
   { href: "/brokers",          label: "Brokers"         },
   { href: "/broker-contacts",  label: "Broker Contacts" },

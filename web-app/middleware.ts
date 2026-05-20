@@ -18,6 +18,7 @@ const PROTECTED_PREFIXES = [
   "/loads",
   "/drivers",
   "/payroll",
+  "/settlements",
   "/fleet",
   "/brokers",
   "/broker-contacts",

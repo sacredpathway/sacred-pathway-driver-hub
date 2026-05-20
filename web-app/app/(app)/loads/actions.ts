@@ -82,6 +82,10 @@ const LOAD_STATUSES = [
   "cancelled",
 ] as const;
 
+// Exported so the New Load form can render the same option set.
+export const LOAD_STATUS_OPTIONS: ReadonlyArray<(typeof LOAD_STATUSES)[number]> =
+  LOAD_STATUSES;
+
 export type LoadActionState =
   | { ok: true }
   | { ok: false; error: string; field?: string };
@@ -375,4 +379,156 @@ export async function deleteLoadAction(loadId: string): Promise<void> {
 
   revalidatePath("/loads");
   redirect("/loads?deleted=1");
+}
+
+// =============================================================================
+//  CREATE load — Phase W7
+// -----------------------------------------------------------------------------
+//  Shape matches the iOS Smart Scan output so a manually-typed load is
+//  indistinguishable downstream from a scanned one. Optional driver / truck /
+//  trailer pickers are gated by ownership re-checks (same as updateLoadAction).
+//
+//  Broker linkage strategy: iOS owns the brokers/broker_contacts normalization
+//  pipeline. For the web create flow we accept free-form broker_name (+ MC #,
+//  contact info) and leave broker_id / broker_contact_id NULL. iOS Smart Scan
+//  Review and the brokers list continue to back-fill those via their own
+//  matchers, so the load eventually picks up the linkage with no web-side
+//  duplication of the matcher.
+// =============================================================================
+
+export async function createLoadAction(
+  _prev: LoadActionState | undefined,
+  formData: FormData
+): Promise<LoadActionState> {
+  let payload: {
+    load_number: string | null;
+    broker_name: string | null;
+    broker_mc_number: string | null;
+    broker_contact_name: string | null;
+    broker_contact_phone: string | null;
+    broker_phone_extension: string | null;
+    broker_contact_email: string | null;
+    origin: string | null;
+    destination: string | null;
+    pickup_date: string | null;
+    delivery_date: string | null;
+    total_miles: number | null;
+    line_haul_rate: number | null;
+    fuel_surcharge: number | null;
+    accessorial_charges: number | null;
+    total_revenue: number | null;
+    status: string;
+    driver_id: string | null;
+    truck_id: string | null;
+    trailer_id: string | null;
+  };
+
+  let driverId:  string | null;
+  let truckId:   string | null;
+  let trailerId: string | null;
+
+  try {
+    const statusRaw = s(formData, "status") ?? "unassigned";
+    if (!(LOAD_STATUSES as ReadonlyArray<string>).includes(statusRaw)) {
+      throw new FieldError(
+        "status",
+        `Status must be one of: ${LOAD_STATUSES.join(", ")}.`
+      );
+    }
+
+    driverId  = maybeUuid(formData, "driver_id",  "Driver");
+    truckId   = maybeUuid(formData, "truck_id",   "Truck");
+    trailerId = maybeUuid(formData, "trailer_id", "Trailer");
+
+    payload = {
+      load_number:            s(formData, "load_number"),
+      broker_name:            s(formData, "broker_name"),
+      broker_mc_number:       s(formData, "broker_mc_number"),
+      broker_contact_name:    s(formData, "broker_contact_name"),
+      broker_contact_phone:   s(formData, "broker_contact_phone"),
+      broker_phone_extension: s(formData, "broker_phone_extension"),
+      broker_contact_email:   s(formData, "broker_contact_email"),
+      origin:                 s(formData, "origin"),
+      destination:            s(formData, "destination"),
+      pickup_date:            date(formData, "pickup_date"),
+      delivery_date:          date(formData, "delivery_date"),
+      total_miles:            num(formData, "total_miles",        { nonNegative: true, label: "Miles" }),
+      line_haul_rate:         num(formData, "line_haul_rate",     { nonNegative: true, label: "Line haul" }),
+      fuel_surcharge:         num(formData, "fuel_surcharge",     { nonNegative: true, label: "Fuel surcharge" }),
+      accessorial_charges:    num(formData, "accessorial_charges",{ nonNegative: true, label: "Accessorials" }),
+      total_revenue:          num(formData, "total_revenue",      { nonNegative: true, label: "Total revenue" }),
+      status:                 statusRaw,
+      driver_id:              driverId,
+      truck_id:               truckId,
+      trailer_id:             trailerId,
+    };
+
+    // Auto-compute total_revenue if the carrier filled the components but
+    // left total blank. Mirrors iOS scan behavior.
+    if (payload.total_revenue === null) {
+      const parts =
+        (payload.line_haul_rate     ?? 0) +
+        (payload.fuel_surcharge     ?? 0) +
+        (payload.accessorial_charges ?? 0);
+      if (parts > 0) payload.total_revenue = Math.round(parts * 100) / 100;
+    }
+  } catch (e) {
+    if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
+    return { ok: false, error: (e as Error).message };
+  }
+
+  // At least one of: load_number, broker_name, origin, destination must be
+  // provided so the row is identifiable in lists.
+  if (
+    !payload.load_number &&
+    !payload.broker_name &&
+    !payload.origin &&
+    !payload.destination
+  ) {
+    return {
+      ok: false,
+      error: "Provide at least a load #, broker, origin, or destination.",
+      field: "load_number",
+    };
+  }
+
+  if (
+    payload.pickup_date && payload.delivery_date &&
+    new Date(payload.delivery_date) < new Date(payload.pickup_date)
+  ) {
+    return {
+      ok: false,
+      error: "Delivery date must be on or after pickup date.",
+      field: "delivery_date",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Ownership re-checks for the optional FKs.
+  if (driverId) {
+    const { data } = await supabase.from("drivers").select("id").eq("id", driverId).maybeSingle();
+    if (!data) return { ok: false, error: "Selected driver isn't on your roster.", field: "driver_id" };
+  }
+  if (truckId) {
+    const { data } = await supabase.from("trucks").select("id").eq("id", truckId).maybeSingle();
+    if (!data) return { ok: false, error: "Selected truck isn't in your fleet.", field: "truck_id" };
+  }
+  if (trailerId) {
+    const { data } = await supabase.from("trailers").select("id").eq("id", trailerId).maybeSingle();
+    if (!data) return { ok: false, error: "Selected trailer isn't in your fleet.", field: "trailer_id" };
+  }
+
+  const { data, error } = await supabase
+    .from("loads")
+    .insert({ ...payload, profile_id: user.id })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/loads");
+  revalidatePath("/dashboard");
+  redirect(`/loads/${data.id}?created=1`);
 }

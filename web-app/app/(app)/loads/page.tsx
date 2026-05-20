@@ -9,7 +9,7 @@ export const runtime = "edge";
 export default async function LoadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ deleted?: string }>;
+  searchParams: Promise<{ deleted?: string; created?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
@@ -46,10 +46,31 @@ export default async function LoadsPage({
 
   if (loads.length === 0) {
     return (
-      <EmptyState
-        title="No loads yet"
-        body="Loads created in the Driver Hub iPhone app appear here automatically. You can also generate a 1099 settlement directly from Payroll once you've added a load."
-      />
+      <section className="space-y-4">
+        <header className="flex items-baseline justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Loads</h1>
+          <Link
+            href="/loads/new"
+            className="rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
+          >
+            + New load
+          </Link>
+        </header>
+        {sp.created && <FlashOK message="Load created." />}
+        {sp.deleted && <FlashOK message="Load deleted." />}
+        <EmptyState
+          title="No loads yet"
+          body="Add a load manually, or scan one with the iPhone Smart Scanner — both land here."
+          cta={
+            <Link
+              href="/loads/new"
+              className="inline-block rounded-md bg-sp-gold px-4 py-2 text-sm font-semibold text-sp-black hover:bg-sp-goldLight"
+            >
+              Add your first load
+            </Link>
+          }
+        />
+      </section>
     );
   }
 
@@ -57,14 +78,19 @@ export default async function LoadsPage({
     <section className="space-y-4">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Loads</h1>
-        <span className="text-xs text-sp-textSecondary">{loads.length} total</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-sp-textSecondary">{loads.length} total</span>
+          <Link
+            href="/loads/new"
+            className="rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
+          >
+            + New load
+          </Link>
+        </div>
       </header>
 
-      {sp.deleted && (
-        <div className="rounded-md border border-sp-success/40 bg-sp-success/10 px-3 py-2 text-sm text-sp-success">
-          Load deleted.
-        </div>
-      )}
+      {sp.created && <FlashOK message="Load created." />}
+      {sp.deleted && <FlashOK message="Load deleted." />}
 
       <div className="overflow-x-auto rounded-xl border border-white/5">
         <table className="min-w-full divide-y divide-white/5 text-sm">
@@ -128,5 +154,13 @@ export default async function LoadsPage({
         </table>
       </div>
     </section>
+  );
+}
+
+function FlashOK({ message }: { message: string }) {
+  return (
+    <div className="rounded-md border border-sp-success/40 bg-sp-success/10 px-3 py-2 text-sm text-sp-success">
+      {message}
+    </div>
   );
 }
