@@ -44,7 +44,12 @@ const PROTECTED_PREFIXES = [
   "/documents",
   "/reports",
   "/settings",
+  "/team",
 ];
+// /join/<code> is intentionally PUBLIC so a brand-new driver who hasn't
+// signed up yet can land on the page, see the carrier name, then click
+// through to /auth/signin?next=/join/<code>. The page itself gates the
+// Accept button on auth.uid().
 
 /**
  * Copy every cookie set on `from` onto `to`. Use for any response we hand

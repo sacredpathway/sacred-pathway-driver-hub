@@ -13,30 +13,46 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-const LINKS: Array<{ href: string; label: string }> = [
-  { href: "/dashboard",        label: "Dashboard"       },
-  { href: "/loads",            label: "Loads"           },
-  { href: "/drivers",          label: "Drivers"         },
-  { href: "/payroll",          label: "Payroll"         },
-  { href: "/settlements",      label: "Settlements"     },
-  { href: "/fleet",            label: "Fleet"           },
-  { href: "/brokers",          label: "Brokers"         },
-  { href: "/broker-contacts",  label: "Broker Contacts" },
-  { href: "/expenses",         label: "Expenses"        },
-  { href: "/documents",        label: "Documents"       },
-  { href: "/reports",          label: "Reports"         },
-  { href: "/settings",         label: "Settings"        },
+// Carrier-Sponsored Driver Access: each link declares which access levels
+// can see it. Driver-only users (carrier_driver / basic_driver) don't need
+// to see the carrier admin surfaces like /team, /drivers (roster CRUD),
+// /fleet, /brokers, /broker-contacts.
+type NavAccess = "carrier_admin" | "driver" | "any";
+type AppAccessLevel = "free" | "basic_driver" | "carrier_driver" | "carrier_admin";
+
+const LINKS: Array<{ href: string; label: string; visibleTo: NavAccess }> = [
+  { href: "/dashboard",        label: "Dashboard",       visibleTo: "any"            },
+  { href: "/loads",            label: "Loads",           visibleTo: "any"            },
+  { href: "/drivers",          label: "Drivers",         visibleTo: "carrier_admin"  },
+  { href: "/team",             label: "Team",            visibleTo: "carrier_admin"  },
+  { href: "/payroll",          label: "Payroll",         visibleTo: "any"            },
+  { href: "/settlements",      label: "Settlements",     visibleTo: "any"            },
+  { href: "/fleet",            label: "Fleet",           visibleTo: "carrier_admin"  },
+  { href: "/brokers",          label: "Brokers",         visibleTo: "carrier_admin"  },
+  { href: "/broker-contacts",  label: "Broker Contacts", visibleTo: "carrier_admin"  },
+  { href: "/expenses",         label: "Expenses",        visibleTo: "any"            },
+  { href: "/documents",        label: "Documents",       visibleTo: "any"            },
+  { href: "/reports",          label: "Reports",         visibleTo: "any"            },
+  { href: "/settings",         label: "Settings",        visibleTo: "any"            },
 ];
+
+function visibleLinks(accessLevel: AppAccessLevel | undefined) {
+  if (accessLevel === "carrier_admin" || !accessLevel) return LINKS;
+  return LINKS.filter((l) => l.visibleTo !== "carrier_admin");
+}
 
 export default function Nav({
   email,
   companyName,
   logoUrl,
+  accessLevel,
 }: {
   email?: string | null;
   companyName?: string | null;
   logoUrl?: string | null;
+  accessLevel?: AppAccessLevel;
 }) {
+  const links = visibleLinks(accessLevel);
   const path = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -64,7 +80,7 @@ export default function Nav({
         </Link>
 
         <nav className="hidden gap-1 md:flex">
-          {LINKS.map((l) => {
+          {links.map((l) => {
             const active = path === l.href || path.startsWith(l.href + "/");
             return (
               <Link
@@ -123,7 +139,7 @@ export default function Nav({
       {open && (
         <nav className="border-t border-white/5 bg-sp-background md:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3">
-            {LINKS.map((l) => {
+            {links.map((l) => {
               const active = path === l.href || path.startsWith(l.href + "/");
               return (
                 <Link

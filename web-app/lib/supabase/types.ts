@@ -121,6 +121,39 @@ export const PAYSTUB_THEMES: ReadonlyArray<PaystubTheme> = [
   "blue_gray",
 ];
 
+// Carrier-Sponsored Driver Access — multi-user foundation.
+export type CarrierMemberRole = "driver" | "admin";
+export type CarrierMemberStatus = "active" | "removed";
+
+export interface CarrierInvite {
+  id: UUID;
+  carrier_profile_id: UUID;
+  invite_code: string;
+  email: string | null;
+  role: CarrierMemberRole;
+  created_by_user_id: UUID | null;
+  created_at: ISODate | null;
+  expires_at: ISODate | null;
+  revoked_at: ISODate | null;
+  max_uses: number;
+  use_count: number;
+  notes: string | null;
+}
+
+export interface CarrierMember {
+  id: UUID;
+  carrier_profile_id: UUID;
+  user_id: UUID;
+  role: CarrierMemberRole;
+  status: CarrierMemberStatus;
+  invite_id: UUID | null;
+  linked_driver_id: UUID | null;
+  joined_at: ISODate | null;
+  removed_at: ISODate | null;
+  removed_by_user_id: UUID | null;
+  notes: string | null;
+}
+
 export interface Profile {
   id: UUID;
   company_name: string | null;
@@ -128,6 +161,10 @@ export interface Profile {
   dot_number: string | null;
   phone: string | null;
   subscription_tier: string | null;
+  /** Carrier-Sponsored Driver Access: distinguishes carrier-owned profiles
+   *  from driver-owned ones. NULL on every pre-existing row (all carriers).
+   *  Set to 'driver' when a new driver creates an account via the join flow. */
+  account_type: "carrier" | "driver" | null;
 
   // -- Fee defaults (base schema; iOS owns these too) ----------------------
   driver_pay_percentage: number | null;

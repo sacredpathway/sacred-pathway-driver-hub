@@ -23,6 +23,9 @@ import {
 } from "@/lib/activity/log";
 import type { Load, Expense, Paystub, Driver } from "@/lib/supabase/types";
 import PeriodToggles from "./PeriodToggles";
+import DriverProgressCard from "./DriverProgressCard";
+import OutsideDriverPaywall from "./OutsideDriverPaywall";
+import { resolveAccess } from "@/lib/entitlement/resolver";
 
 export const runtime = "edge";
 
@@ -32,6 +35,26 @@ export default async function DashboardPage({
   searchParams: Promise<{ preset?: string; from?: string; to?: string }>;
 }) {
   const sp = await searchParams;
+
+  // ---------------------------------------------------------------------
+  // Entitlement gate (Carrier-Sponsored Driver Access)
+  // ---------------------------------------------------------------------
+  // Outside drivers — signed in but no carrier sponsorship and no personal
+  // subscription — see ONLY the paywall card. Skipping all the supabase
+  // queries below also means RLS-restricted tables don't fire empty reads
+  // that would just return [].
+  const earlyClient = await createClient();
+  const earlyEntitlement = await resolveAccess(earlyClient);
+  if (earlyEntitlement.accessLevel === "free" && earlyEntitlement.userId) {
+    return (
+      <section className="space-y-6">
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        </header>
+        <OutsideDriverPaywall />
+      </section>
+    );
+  }
 
   // Default to "all time" on the dashboard so first-paint matches W1 totals.
   const range = resolveRange({
@@ -88,12 +111,16 @@ export default async function DashboardPage({
   ] = await Promise.all([
     loadsQuery,
     expensesQuery,
+    // Expanded select so DriverProgressCard can show est-pay + truck #
+    // without a second round-trip. Scope still respects RLS (own carrier).
     supabase
       .from("drivers")
-      .select("id, active"),
+      .select("id, name, active, pay_percentage, flat_rate, pay_type, truck_number"),
+    // Add check_date + created_at + driver_id so DriverProgressCard can
+    // attribute paystubs and last-activity timestamps per driver.
     supabase
       .from("paystubs")
-      .select("id, status"),
+      .select("id, status, driver_id, check_date, created_at"),
     supabase
       .from("activity_log")
       .select("*")
@@ -103,9 +130,18 @@ export default async function DashboardPage({
 
   const loads:    Load[]    = (loadsRaw    ?? []) as Load[];
   const expenses: Expense[] = (expensesRaw ?? []) as Expense[];
-  const drivers   = (driversRaw   ?? []) as Array<Pick<Driver,  "id" | "active">>;
-  const paystubs  = (paystubsRaw  ?? []) as Array<Pick<Paystub, "id" | "status">>;
+  const drivers   = (driversRaw   ?? []) as Array<
+    Pick<Driver, "id" | "name" | "active" | "pay_percentage" | "flat_rate" | "pay_type" | "truck_number">
+  >;
+  const paystubs  = (paystubsRaw  ?? []) as Array<
+    Pick<Paystub, "id" | "status" | "driver_id" | "check_date" | "created_at">
+  >;
   const activity  = (activityRaw  ?? []) as ActivityRow[];
+
+  // Carrier-Sponsored Driver Access: only carrier admins see the
+  // per-driver progress card. Drivers (sponsored or basic) don't need it.
+  const entitlement = await resolveAccess(supabase);
+  const isCarrierAdmin = entitlement.accessLevel === "carrier_admin";
 
   // -- Original W1 metrics ----------------------------------------------
   const totalRevenue  = loads.reduce((s, l) => s + (l.total_revenue ?? 0), 0);
@@ -206,6 +242,16 @@ export default async function DashboardPage({
         </Link>
         <GustoLinkButton variant="button" />
       </section>
+
+      {/* ---------- Driver progress (carrier admin only) ---------- */}
+      {isCarrierAdmin && (
+        <DriverProgressCard
+          drivers={drivers}
+          loads={loads}
+          expenses={expenses}
+          paystubs={paystubs}
+        />
+      )}
 
       {/* ---------- Recent activity ---------- */}
       <RecentActivity rows={activity} />
