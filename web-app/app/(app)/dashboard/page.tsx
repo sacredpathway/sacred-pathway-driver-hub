@@ -48,6 +48,37 @@ export default async function DashboardPage({
   // are scope-wide (the carrier always wants the current driver roster and
   // pending paystub count, not the period-restricted view).
   // -----------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Date-field semantics — must match iOS DashboardView.filterByPeriod which
+  // filters loads + expenses by `createdAt`, NOT by pickup_date / receipt_date.
+  // See SacredPathway/Views/Dashboard/DashboardView.swift lines 35-39 +
+  // filterByPeriod at line 353. For "all time" iOS returns every row (no
+  // filter applied), so we omit the gte/lte clauses entirely to include
+  // rows with NULL created_at as well as full history.
+  //
+  // created_at is a TIMESTAMPTZ — compare against full ISO instants so the
+  // entire "to" day is inclusive (T23:59:59.999Z).
+  // -----------------------------------------------------------------------
+  const isAllTime = range.preset === "all_time";
+  const fromInstant = `${range.from}T00:00:00.000Z`;
+  const toInstant   = `${range.to}T23:59:59.999Z`;
+
+  const loadsQuery = (() => {
+    let q = supabase.from("loads").select("*");
+    if (!isAllTime) {
+      q = q.gte("created_at", fromInstant).lte("created_at", toInstant);
+    }
+    return q.order("created_at", { ascending: false });
+  })();
+
+  const expensesQuery = (() => {
+    let q = supabase.from("expenses").select("*");
+    if (!isAllTime) {
+      q = q.gte("created_at", fromInstant).lte("created_at", toInstant);
+    }
+    return q.order("created_at", { ascending: false });
+  })();
+
   const [
     { data: loadsRaw },
     { data: expensesRaw },
@@ -55,18 +86,8 @@ export default async function DashboardPage({
     { data: paystubsRaw },
     { data: activityRaw },
   ] = await Promise.all([
-    supabase
-      .from("loads")
-      .select("*")
-      .gte("pickup_date", range.from)
-      .lte("pickup_date", range.to)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("expenses")
-      .select("*")
-      .gte("receipt_date", range.from)
-      .lte("receipt_date", range.to)
-      .order("created_at", { ascending: false }),
+    loadsQuery,
+    expensesQuery,
     supabase
       .from("drivers")
       .select("id, active"),
