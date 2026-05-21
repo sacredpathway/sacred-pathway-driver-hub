@@ -106,11 +106,24 @@ export default async function DashboardPage({
         <span className="text-xs text-sp-textSecondary">{range.label}</span>
       </header>
 
-      {/* ---------- Quick-pick period chips ---------- */}
+      {/* ---------- Period selector ---------- */}
+      {/*
+        Chips are the primary control — one-click, zero ceremony. Custom
+        date ranges are tucked into a <details> disclosure underneath so
+        the dashboard isn't cluttered with a second always-visible card.
+        Closed by default; opens on click when the carrier actually needs
+        an arbitrary window.
+      */}
       <PeriodToggles selected={range.preset} />
-
-      {/* ---------- Custom period filter (dropdown + from/to + Apply) ---------- */}
-      <PeriodFilter range={range} />
+      <details className="group rounded-md text-xs print:hidden">
+        <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-md px-2 py-1 text-sp-textSecondary hover:bg-white/5 hover:text-sp-textPrimary">
+          <span className="transition-transform group-open:rotate-90">▸</span>
+          <span>Custom date range</span>
+        </summary>
+        <div className="pt-3">
+          <PeriodFilter range={range} />
+        </div>
+      </details>
 
       {/* ---------- Original W1 tiles (kept) + W9 additions ---------- */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
