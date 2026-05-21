@@ -22,6 +22,7 @@ import {
   type ActivityRow,
 } from "@/lib/activity/log";
 import type { Load, Expense, Paystub, Driver } from "@/lib/supabase/types";
+import PeriodToggles from "./PeriodToggles";
 
 export const runtime = "edge";
 
@@ -105,7 +106,10 @@ export default async function DashboardPage({
         <span className="text-xs text-sp-textSecondary">{range.label}</span>
       </header>
 
-      {/* ---------- Period filter ---------- */}
+      {/* ---------- Quick-pick period chips ---------- */}
+      <PeriodToggles selected={range.preset} />
+
+      {/* ---------- Custom period filter (dropdown + from/to + Apply) ---------- */}
       <PeriodFilter range={range} />
 
       {/* ---------- Original W1 tiles (kept) + W9 additions ---------- */}

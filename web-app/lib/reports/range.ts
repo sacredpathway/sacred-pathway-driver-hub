@@ -15,7 +15,9 @@
 
 export type RangePresetId =
   | "this_week"
+  | "last_week"
   | "this_month"
+  | "last_month"
   | "this_quarter"
   | "ytd"
   | "last_30"
@@ -36,7 +38,9 @@ export const RANGE_PRESETS: ReadonlyArray<{
   label: string;
 }> = [
   { id: "this_week",    label: "This week" },
+  { id: "last_week",    label: "Last week" },
   { id: "this_month",   label: "This month" },
+  { id: "last_month",   label: "Last month" },
   { id: "this_quarter", label: "This quarter" },
   { id: "ytd",          label: "Year to date" },
   { id: "last_30",      label: "Last 30 days" },
@@ -83,9 +87,32 @@ function applyPreset(
       const start = utcDate(y, m, d - dow);
       return { from: ymd(start), to: todayYmd };
     }
+    case "last_week": {
+      // [last Sunday → last Saturday], i.e. the 7 days *before* this_week's start.
+      const dow = today.getUTCDay();
+      const thisWeekStart = utcDate(y, m, d - dow);
+      const start = utcDate(
+        thisWeekStart.getUTCFullYear(),
+        thisWeekStart.getUTCMonth(),
+        thisWeekStart.getUTCDate() - 7
+      );
+      const end = utcDate(
+        thisWeekStart.getUTCFullYear(),
+        thisWeekStart.getUTCMonth(),
+        thisWeekStart.getUTCDate() - 1
+      );
+      return { from: ymd(start), to: ymd(end) };
+    }
     case "this_month": {
       const start = utcDate(y, m, 1);
       return { from: ymd(start), to: todayYmd };
+    }
+    case "last_month": {
+      // utcDate handles month wrap when m=0 → previous year, month=11.
+      const start = utcDate(y, m - 1, 1);
+      // Day 0 of the current month is the last day of the previous month.
+      const end = utcDate(y, m, 0);
+      return { from: ymd(start), to: ymd(end) };
     }
     case "this_quarter": {
       const qStartMonth = Math.floor(m / 3) * 3;
