@@ -138,6 +138,10 @@ export interface CarrierInvite {
   max_uses: number;
   use_count: number;
   notes: string | null;
+  /** Set by inviteDriverAction so accept_carrier_invite() can copy it
+   *  into carrier_members.linked_driver_id on acceptance. Nullable for
+   *  legacy invites created before 20260528 migration. */
+  linked_driver_id: UUID | null;
 }
 
 export interface CarrierMember {

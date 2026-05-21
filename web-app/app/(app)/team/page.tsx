@@ -18,6 +18,7 @@ import type {
   CarrierMember,
   Profile,
 } from "@/lib/supabase/types";
+import InviteDriverForm from "./InviteDriverForm";
 import InviteForm from "./InviteForm";
 import RemoveMemberButton from "./RemoveMemberButton";
 import RevokeInviteButton from "./RevokeInviteButton";
@@ -97,8 +98,18 @@ export default async function TeamPage({
         </div>
       )}
 
-      {/* Invite form */}
-      <InviteForm />
+      {/* Primary invite path — full driver info + email */}
+      <InviteDriverForm />
+
+      {/* Secondary: bulk shareable code (collapsed) */}
+      <details className="group rounded-xl border border-white/5 bg-sp-card/50 p-4 text-sm open:bg-sp-card">
+        <summary className="cursor-pointer select-none text-xs font-semibold text-sp-textSecondary group-open:text-sp-textPrimary">
+          Need a shareable code instead? (multi-use link for orientation / job-fair flyers)
+        </summary>
+        <div className="mt-3">
+          <InviteForm />
+        </div>
+      </details>
 
       {/* Open invites */}
       <section className="space-y-2">
