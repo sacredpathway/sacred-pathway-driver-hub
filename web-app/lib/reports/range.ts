@@ -64,9 +64,10 @@ function utcDate(year: number, month: number, day: number): Date {
 /**
  * Convert a preset into an absolute [from, to] range.
  *
- * - Week: Sunday → Saturday (calendar default; we don't read the user's
- *   PayWeek preference here because reports are calendar-centric, not
- *   payroll-centric).
+ * - Week: Monday → Sunday (ISO-8601, matches iOS PayWeekService default
+ *   `firstWeekday = 2`). Was Sunday-start prior to 2026-05-21; switched to
+ *   Monday to keep web "This week" totals identical to iOS for the same
+ *   user.
  * - Quarter: Q1 = Jan–Mar, etc.
  * - all_time: returns 1970-01-01 .. today (effectively "no lower bound").
  * - last_30 / last_90 / last_year: rolling windows ending today.
@@ -83,13 +84,15 @@ function applyPreset(
 
   switch (preset) {
     case "this_week": {
-      const dow = today.getUTCDay(); // 0=Sun..6=Sat
+      // ISO-8601 Monday start. JS getUTCDay() returns 0=Sun..6=Sat; convert
+      // to 0=Mon..6=Sun by ((dow + 6) % 7), then subtract from today.
+      const dow = (today.getUTCDay() + 6) % 7; // Mon=0..Sun=6
       const start = utcDate(y, m, d - dow);
       return { from: ymd(start), to: todayYmd };
     }
     case "last_week": {
-      // [last Sunday → last Saturday], i.e. the 7 days *before* this_week's start.
-      const dow = today.getUTCDay();
+      // [last Monday → last Sunday], i.e. the 7 days *before* this_week's start.
+      const dow = (today.getUTCDay() + 6) % 7; // Mon=0..Sun=6
       const thisWeekStart = utcDate(y, m, d - dow);
       const start = utcDate(
         thisWeekStart.getUTCFullYear(),

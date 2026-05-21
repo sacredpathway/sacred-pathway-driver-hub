@@ -86,62 +86,109 @@ export default async function DashboardPage({
   const fromInstant = `${range.from}T00:00:00.000Z`;
   const toInstant   = `${range.to}T23:59:59.999Z`;
 
-  const loadsQuery = (() => {
-    let q = supabase.from("loads").select("*");
-    if (!isAllTime) {
-      q = q.gte("created_at", fromInstant).lte("created_at", toInstant);
-    }
-    return q.order("created_at", { ascending: false });
-  })();
-
-  const expensesQuery = (() => {
-    let q = supabase.from("expenses").select("*");
-    if (!isAllTime) {
-      q = q.gte("created_at", fromInstant).lte("created_at", toInstant);
-    }
-    return q.order("created_at", { ascending: false });
-  })();
-
-  const [
-    { data: loadsRaw },
-    { data: expensesRaw },
-    { data: driversRaw },
-    { data: paystubsRaw },
-    { data: activityRaw },
-  ] = await Promise.all([
-    loadsQuery,
-    expensesQuery,
-    // Expanded select so DriverProgressCard can show est-pay + truck #
-    // without a second round-trip. Scope still respects RLS (own carrier).
-    supabase
-      .from("drivers")
-      .select("id, name, active, pay_percentage, flat_rate, pay_type, truck_number"),
-    // Add check_date + created_at + driver_id so DriverProgressCard can
-    // attribute paystubs and last-activity timestamps per driver.
-    supabase
-      .from("paystubs")
-      .select("id, status, driver_id, check_date, created_at"),
-    supabase
-      .from("activity_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(10),
-  ]);
-
-  const loads:    Load[]    = (loadsRaw    ?? []) as Load[];
-  const expenses: Expense[] = (expensesRaw ?? []) as Expense[];
-  const drivers   = (driversRaw   ?? []) as Array<
-    Pick<Driver, "id" | "name" | "active" | "pay_percentage" | "flat_rate" | "pay_type" | "truck_number">
-  >;
-  const paystubs  = (paystubsRaw  ?? []) as Array<
-    Pick<Paystub, "id" | "status" | "driver_id" | "check_date" | "created_at">
-  >;
-  const activity  = (activityRaw  ?? []) as ActivityRow[];
-
-  // Carrier-Sponsored Driver Access: only carrier admins see the
-  // per-driver progress card. Drivers (sponsored or basic) don't need it.
-  const entitlement = await resolveAccess(supabase);
+  // -----------------------------------------------------------------------
+  // Resolve entitlement BEFORE the data fetch — sponsored drivers need a
+  // different read path than carrier admins. Direct loads/expenses/paystubs
+  // SELECTs RLS-scope to profile_id = auth.uid() which would return [] for
+  // a driver (the data is owned by the carrier's profile_id). We route them
+  // through the SECURITY DEFINER `driver_dashboard_data` RPC which resolves
+  // their active membership and returns the (carrier, this-driver)-scoped
+  // subset only.
+  // -----------------------------------------------------------------------
+  const entitlement    = await resolveAccess(supabase);
   const isCarrierAdmin = entitlement.accessLevel === "carrier_admin";
+  const isCarrierDriver= entitlement.accessLevel === "carrier_driver";
+
+  let loads:    Load[]    = [];
+  let expenses: Expense[] = [];
+  let drivers:  Array<
+    Pick<Driver, "id" | "name" | "active" | "pay_percentage" | "flat_rate" | "pay_type" | "truck_number">
+  > = [];
+  let paystubs: Array<
+    Pick<Paystub, "id" | "status" | "driver_id" | "check_date" | "created_at">
+  > = [];
+  let activity: ActivityRow[] = [];
+  // When a sponsored driver isn't yet linked by their carrier to a drivers
+  // roster row, the RPC returns needs_link=true and empty arrays. UI uses
+  // this to render a friendly "ask your carrier to link your account".
+  let driverNeedsLink = false;
+
+  if (isCarrierDriver) {
+    // ---- sponsored-driver read path (RPC) ----
+    const { data: rpcRaw } = await supabase.rpc("driver_dashboard_data", {
+      p_from: isAllTime ? null : fromInstant,
+      p_to:   isAllTime ? null : toInstant,
+    });
+
+    const rpc = (rpcRaw ?? {}) as {
+      ok?: boolean;
+      error?: string;
+      needs_link?: boolean;
+      loads?: Load[];
+      paystubs?: Array<Pick<Paystub, "id" | "status" | "driver_id" | "check_date" | "created_at">>;
+      expenses?: Expense[];
+    };
+
+    if (rpc.ok) {
+      loads    = (rpc.loads    ?? []) as Load[];
+      expenses = (rpc.expenses ?? []) as Expense[];
+      paystubs = (rpc.paystubs ?? []) as typeof paystubs;
+      driverNeedsLink = rpc.needs_link === true;
+    }
+    // No drivers roster query, no activity_log query — both are
+    // carrier-admin concerns. Drivers see neither card.
+  } else {
+    // ---- carrier-admin (and any other tier with hasAppAccess) path ----
+    // Unchanged from the prior carrier-admin behavior: direct SELECTs scoped
+    // by RLS to the carrier's own profile_id.
+    const loadsQuery = (() => {
+      let q = supabase.from("loads").select("*");
+      if (!isAllTime) {
+        q = q.gte("created_at", fromInstant).lte("created_at", toInstant);
+      }
+      return q.order("created_at", { ascending: false });
+    })();
+
+    const expensesQuery = (() => {
+      let q = supabase.from("expenses").select("*");
+      if (!isAllTime) {
+        q = q.gte("created_at", fromInstant).lte("created_at", toInstant);
+      }
+      return q.order("created_at", { ascending: false });
+    })();
+
+    const [
+      { data: loadsRaw },
+      { data: expensesRaw },
+      { data: driversRaw },
+      { data: paystubsRaw },
+      { data: activityRaw },
+    ] = await Promise.all([
+      loadsQuery,
+      expensesQuery,
+      // Expanded select so DriverProgressCard can show est-pay + truck #
+      // without a second round-trip. Scope still respects RLS (own carrier).
+      supabase
+        .from("drivers")
+        .select("id, name, active, pay_percentage, flat_rate, pay_type, truck_number"),
+      // Add check_date + created_at + driver_id so DriverProgressCard can
+      // attribute paystubs and last-activity timestamps per driver.
+      supabase
+        .from("paystubs")
+        .select("id, status, driver_id, check_date, created_at"),
+      supabase
+        .from("activity_log")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+
+    loads    = (loadsRaw    ?? []) as Load[];
+    expenses = (expensesRaw ?? []) as Expense[];
+    drivers  = (driversRaw  ?? []) as typeof drivers;
+    paystubs = (paystubsRaw ?? []) as typeof paystubs;
+    activity = (activityRaw ?? []) as ActivityRow[];
+  }
 
   // -- Original W1 metrics ----------------------------------------------
   const totalRevenue  = loads.reduce((s, l) => s + (l.total_revenue ?? 0), 0);
@@ -193,13 +240,16 @@ export default async function DashboardPage({
         <StatCard label="Avg Revenue / Load"  value={loadCount > 0 ? formatCurrency(avgRevPerLoad) : "—"} />
         <StatCard label="Expenses Logged"     value={formatNumber(expenses.length)} />
 
-        {/* W9 — scope-wide carrier ops tiles */}
-        <StatCard
-          label="Active Drivers"
-          value={formatNumber(activeDrivers)}
-          sublabel={`of ${formatNumber(drivers.length)} total`}
-          tone={activeDrivers > 0 ? "good" : "neutral"}
-        />
+        {/* W9 — scope-wide carrier ops tiles. Active Drivers is admin-only;
+            Pending Payroll makes sense for drivers too (their own drafts). */}
+        {isCarrierAdmin && (
+          <StatCard
+            label="Active Drivers"
+            value={formatNumber(activeDrivers)}
+            sublabel={`of ${formatNumber(drivers.length)} total`}
+            tone={activeDrivers > 0 ? "good" : "neutral"}
+          />
+        )}
         <StatCard
           label="Pending Payroll"
           value={formatNumber(pendingPayroll)}
@@ -208,40 +258,73 @@ export default async function DashboardPage({
         />
       </div>
 
+      {/* Sponsored-driver hasn't been linked yet by their carrier — show a
+          friendly banner instead of an empty dashboard. */}
+      {driverNeedsLink && (
+        <div className="rounded-xl border border-sp-warning/30 bg-sp-warning/5 p-4 text-sm text-sp-textPrimary">
+          <strong className="text-sp-warning">Almost there.</strong> Your
+          carrier hasn&apos;t linked your account to a driver record yet, so
+          your dashboard shows no totals. Ask your carrier admin to open
+          <code className="mx-1 rounded bg-sp-cardLight px-1.5 py-0.5">/team</code>
+          and assign your driver row — your loads, paystubs, and expenses
+          will appear here the moment they do.
+        </div>
+      )}
+
       {/* ---------- Quick actions strip ---------- */}
-      <section className="flex flex-wrap items-center gap-2">
-        <Link
-          href="/payroll/new"
-          className="rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
-        >
-          + New paystub
-        </Link>
-        <Link
-          href="/loads/new"
-          className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
-        >
-          + New load
-        </Link>
-        <Link
-          href="/expenses/new"
-          className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
-        >
-          + Log expense
-        </Link>
-        <Link
-          href="/drivers/new"
-          className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
-        >
-          + Add driver
-        </Link>
-        <Link
-          href="/reports"
-          className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
-        >
-          Reports
-        </Link>
-        <GustoLinkButton variant="button" />
-      </section>
+      {/* Carrier-admin only — drivers can't create paystubs, loads, drivers,
+          or run carrier-wide reports. Showing them links that would 403 or
+          redirect would be confusing. Drivers see expense logging only. */}
+      {isCarrierAdmin ? (
+        <section className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/payroll/new"
+            className="rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
+          >
+            + New paystub
+          </Link>
+          <Link
+            href="/loads/new"
+            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
+          >
+            + New load
+          </Link>
+          <Link
+            href="/expenses/new"
+            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
+          >
+            + Log expense
+          </Link>
+          <Link
+            href="/drivers/new"
+            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
+          >
+            + Add driver
+          </Link>
+          <Link
+            href="/reports"
+            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
+          >
+            Reports
+          </Link>
+          <GustoLinkButton variant="button" />
+        </section>
+      ) : (
+        <section className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/expenses/new"
+            className="rounded-md bg-sp-gold px-3 py-1.5 text-xs font-semibold text-sp-black hover:bg-sp-goldLight"
+          >
+            + Log expense
+          </Link>
+          <Link
+            href="/payroll"
+            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
+          >
+            My pay history
+          </Link>
+        </section>
+      )}
 
       {/* ---------- Driver progress (carrier admin only) ---------- */}
       {isCarrierAdmin && (
