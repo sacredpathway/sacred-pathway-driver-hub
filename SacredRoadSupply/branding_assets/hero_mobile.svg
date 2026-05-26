@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1350" role="img" aria-label="Sacred Road Supply hero mobile">
+  <defs>
+    <linearGradient id="goldShine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#F0D87C"/>
+    <stop offset="45%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="goldFlat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#0a1b2e"/>
+      <stop offset="35%" stop-color="#1f2c3d"/>
+      <stop offset="65%" stop-color="#7a5a32"/>
+      <stop offset="100%" stop-color="#3a2b1c"/>
+    </linearGradient>
+    <linearGradient id="bottomOverlay" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#0A2F1F" stop-opacity="0"/>
+      <stop offset="55%" stop-color="#0A2F1F" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#051B12" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="1350" fill="url(#skyGrad)"/>
+  <!-- Mountain ridge -->
+  <path d="M0 720 L180 600 L400 660 L600 540 L820 640 L1080 580 L1080 800 L0 800 Z" fill="#1a2030" opacity="0.85"/>
+  <!-- Road centered (vanishing point ~ row 700) -->
+  <path d="M450 700 L630 700 L820 1350 L260 1350 Z" fill="#121212"/>
+  <g fill="url(#goldFlat)">
+    <rect x="535" y="730" width="10" height="22"/>
+    <rect x="530" y="780" width="20" height="30"/>
+    <rect x="520" y="850" width="40" height="40"/>
+    <rect x="500" y="940" width="80" height="55"/>
+  </g>
+  <!-- Bottom overlay for headline readability -->
+  <rect width="1080" height="1350" fill="url(#bottomOverlay)"/>
+
+  <!-- Headline (bottom 40%) -->
+  <g transform="translate(60 950)">
+    <text font-family="Georgia, 'Playfair Display', serif" font-weight="700" font-size="80" fill="#F5F0E1" letter-spacing="-1.5">Gear Built for</text>
+    <text y="86" font-family="Georgia, 'Playfair Display', serif" font-weight="700" font-size="80" fill="#F5F0E1" letter-spacing="-1.5">the Long Haul.</text>
+    <rect x="0" y="112" width="160" height="5" fill="url(#goldShine)"/>
+    <text y="170" font-family="'Inter', Arial, sans-serif" font-weight="500" font-size="26" fill="#F5F0E1">Trucker-tested supplies.</text>
+    <text y="204" font-family="'Inter', Arial, sans-serif" font-weight="500" font-size="26" fill="#F5F0E1">Fast U.S. shipping.</text>
+    <!-- CTAs stacked -->
+    <g transform="translate(0 250)">
+      <rect width="960" height="96" rx="8" fill="url(#goldFlat)"/>
+      <text x="480" y="62" text-anchor="middle" font-family="'Inter', Arial, sans-serif" font-weight="700" font-size="30" fill="#0A2F1F" letter-spacing="2">SHOP NOW</text>
+    </g>
+    <g transform="translate(0 360)">
+      <rect width="960" height="96" rx="8" fill="none" stroke="#F5F0E1" stroke-width="2"/>
+      <text x="480" y="62" text-anchor="middle" font-family="'Inter', Arial, sans-serif" font-weight="600" font-size="24" fill="#F5F0E1" letter-spacing="1.5">NEW DRIVER? START HERE</text>
+    </g>
+  </g>
+</svg>

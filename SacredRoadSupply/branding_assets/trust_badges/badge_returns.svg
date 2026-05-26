@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 440" role="img" aria-label="30-DAY RETURNS">
+<defs>
+  <linearGradient id="goldShine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#F0D87C"/>
+    <stop offset="45%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+  <linearGradient id="goldFlat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+  <filter id="goldShadow" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+    <feOffset dx="0" dy="3" result="offsetblur"/>
+    <feFlood flood-color="#CCAD42" flood-opacity="0.18"/>
+    <feComposite in2="offsetblur" operator="in"/>
+    <feMerge>
+      <feMergeNode/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+</defs>
+<!-- Ring with drop shadow -->
+<g filter="url(#goldShadow)">
+  <circle cx="180" cy="160" r="130" fill="none" stroke="url(#goldShine)" stroke-width="5"/>
+  <circle cx="180" cy="160" r="123" fill="none" stroke="#CCAD42" stroke-width="1" opacity="0.5"/>
+</g>
+
+<g transform="translate(180 160)" stroke="url(#goldShine)" stroke-linecap="round" stroke-linejoin="round">
+
+<path d="M0 -75 L -65 -50 L -65 25 Q -65 70 0 95 Q 65 70 65 25 L 65 -50 Z" fill="#CCAD42" fill-opacity="0.18" stroke-width="8"/>
+<polyline points="-30,5 -8,30 35,-20" stroke-width="10" stroke="#CCAD42" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+</g>
+<!-- R10: caption bumped from 22 → 28 -->
+<text x="180" y="360" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="28" fill="#0A2F1F" letter-spacing="1.5">30-DAY RETURNS</text>
+<text x="180" y="400" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="500" font-size="17" fill="#6B6B6B" letter-spacing="0.5">No restocking fees</text>
+</svg>

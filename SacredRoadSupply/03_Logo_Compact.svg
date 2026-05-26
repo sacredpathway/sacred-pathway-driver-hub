@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Sacred Road Supply mark">
+  <defs>
+    <linearGradient id="goldShine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#F0D87C"/>
+    <stop offset="45%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="goldFlat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="emerald" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#0A2F1F"/>
+    <stop offset="100%" stop-color="#051B12"/>
+  </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#7CC355"/>
+    <stop offset="65%" stop-color="#4A9D3F"/>
+    <stop offset="100%" stop-color="#1A4D26"/>
+  </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.45" r="0.6">
+    <stop offset="0%" stop-color="#1F7A3A" stop-opacity="0.45"/>
+    <stop offset="100%" stop-color="#1F7A3A" stop-opacity="0"/>
+  </radialGradient>
+    <filter id="metallic" x="-10%" y="-10%" width="120%" height="120%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="0.6"/>
+    <feSpecularLighting result="spec" specularExponent="20" lighting-color="#F0D87C">
+      <feDistantLight azimuth="135" elevation="45"/>
+    </feSpecularLighting>
+    <feComposite in="spec" in2="SourceGraphic" operator="in" result="specMask"/>
+    <feMerge>
+      <feMergeNode in="SourceGraphic"/>
+      <feMergeNode in="specMask"/>
+    </feMerge>
+  </filter>
+  </defs>
+
+  <!-- Outer halo (boost to 35% opacity per audit) -->
+  <circle cx="200" cy="200" r="198" fill="#1F7A3A" opacity="0.35"/>
+  <!-- Emerald medallion -->
+  <circle cx="200" cy="200" r="190" fill="url(#emerald)"/>
+  <!-- Inner ambient glow -->
+  <ellipse cx="200" cy="175" rx="175" ry="185" fill="url(#halo)"/>
+  <!-- Gold ring (primary) with metallic finish -->
+  <circle cx="200" cy="200" r="190" fill="none" stroke="url(#goldShine)" stroke-width="7" filter="url(#metallic)"/>
+  <!-- Inner concentric refinement rings -->
+  <circle cx="200" cy="200" r="180" fill="none" stroke="#CCAD42" stroke-width="1" opacity="0.55"/>
+  <circle cx="200" cy="200" r="175" fill="none" stroke="#E6CC73" stroke-width="0.5" opacity="0.35"/>
+
+  <!-- Road -->
+  <path d="M70 340 L170 200 L230 200 L330 340 Z" fill="#121212"/>
+  <g fill="url(#goldFlat)">
+    <rect x="196" y="225" width="8" height="22"/>
+    <rect x="196" y="258" width="8" height="22"/>
+    <rect x="196" y="291" width="8" height="22"/>
+  </g>
+
+  <!-- TREE: organic canopy + tapered trunk + elaborate roots -->
+  <g transform="translate(200,150)">
+    <!-- Substantial tapered trunk -->
+    <path d="M-9,-30 Q-6,0 -8,40 L-8,70 Q-10,78 -5,84 L5,84 Q10,78 8,70 L8,40 Q6,0 9,-30 Z" fill="url(#goldShine)" filter="url(#metallic)"/>
+    <!-- Root system -->
+    <path d="M-3.6,84 L-2.4,108.0 Q0.0,112.8 2.4,108.0 L3.6,84 Z" fill="url(#goldShine)"/>
+  <path d="M-5.4,84.0 Q-18.9,93.6 -26.4,103.2 Q-17.1,93.6 0.6,84.0 Z" fill="url(#goldShine)"/>
+  <path d="M-0.6,84.0 Q17.1,93.6 26.4,103.2 Q18.9,93.6 5.4,84.0 Z" fill="url(#goldShine)"/>
+  <path d="M-5.4,84.0 Q-26.9,87.6 -38.4,93.6 Q-25.9,87.6 -1.8,84.0 Z" fill="url(#goldFlat)" opacity="0.85"/>
+  <path d="M1.8,84.0 Q25.9,87.6 38.4,93.6 Q26.9,87.6 5.4,84.0 Z" fill="url(#goldFlat)" opacity="0.85"/>
+    <!-- Organic canopy -->
+    <ellipse cx="0" cy="-35.0" rx="75.0" ry="82.5" fill="#1A4D26"/>
+  <ellipse cx="0" cy="-42.5" rx="67.5" ry="75.0" fill="url(#leaf)"/>
+  <path d="M-57.0,-21.5 Q-56.1,-24.2 -57.0,-48.5 Q-57.9,-45.8 -57.0,-21.5 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M57.0,-21.5 Q57.9,-45.8 57.0,-48.5 Q56.1,-24.2 57.0,-21.5 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M-45.0,1.0 Q-41.3,-2.4 -45.0,-26.0 Q-48.7,-22.6 -45.0,1.0 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M45.0,1.0 Q48.7,-22.6 45.0,-26.0 Q41.3,-2.4 45.0,1.0 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M-21.0,7.0 Q-12.7,-0.2 -21.0,-17.0 Q-29.3,-9.8 -21.0,7.0 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M21.0,7.0 Q29.3,-9.8 21.0,-17.0 Q12.7,-0.2 21.0,7.0 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M0.0,15.2 Q10.2,2.5 0.0,-10.2 Q-10.2,2.5 0.0,15.2 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M0.0,-93.5 Q-13.2,-110.0 0.0,-126.5 Q13.2,-110.0 0.0,-93.5 Z" fill="#7CC355"/>
+  <path d="M-22.5,-92.0 Q-33.4,-101.9 -22.5,-122.0 Q-11.6,-112.1 -22.5,-92.0 Z" fill="#7CC355"/>
+  <path d="M22.5,-92.0 Q11.6,-112.1 22.5,-122.0 Q33.4,-101.9 22.5,-92.0 Z" fill="#7CC355"/>
+  <path d="M-42.0,-78.5 Q-49.6,-84.4 -42.0,-105.5 Q-34.4,-99.6 -42.0,-78.5 Z" fill="#7CC355"/>
+  <path d="M42.0,-78.5 Q34.4,-99.6 42.0,-105.5 Q49.6,-84.4 42.0,-78.5 Z" fill="#7CC355"/>
+  <path d="M-63.0,-50.0 Q-66.1,-53.4 -63.0,-80.0 Q-59.9,-76.6 -63.0,-50.0 Z" fill="#7CC355"/>
+  <path d="M63.0,-50.0 Q59.9,-76.6 63.0,-80.0 Q66.1,-53.4 63.0,-50.0 Z" fill="#7CC355"/>
+  <path d="M-33.0,-68.0 Q-41.3,-75.2 -33.0,-92.0 Q-24.7,-84.8 -33.0,-68.0 Z" fill="#7CC355"/>
+  <path d="M33.0,-68.0 Q24.7,-84.8 33.0,-92.0 Q41.3,-75.2 33.0,-68.0 Z" fill="#7CC355"/>
+  <path d="M0.0,-93.5 Q-13.2,-110.0 0.0,-126.5 Q13.2,-110.0 0.0,-93.5 Z" fill="none" stroke="#F5F0E1" stroke-width="0.5" opacity="0.4"/>
+  </g>
+
+  <!-- Curved wordmark -->
+  <defs>
+    <path id="arc" d="M 60 200 A 140 140 0 0 1 340 200"/>
+  </defs>
+  <text font-family="Georgia, serif" font-weight="700" font-size="26" fill="url(#goldShine)" letter-spacing="6">
+    <textPath href="#arc" startOffset="50%" text-anchor="middle">SACRED ROAD SUPPLY</textPath>
+  </text>
+</svg>

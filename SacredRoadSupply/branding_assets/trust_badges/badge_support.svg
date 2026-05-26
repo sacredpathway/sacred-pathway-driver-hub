@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 440" role="img" aria-label="REAL-PERSON SUPPORT">
+<defs>
+  <linearGradient id="goldShine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#F0D87C"/>
+    <stop offset="45%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+  <linearGradient id="goldFlat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+  <filter id="goldShadow" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+    <feOffset dx="0" dy="3" result="offsetblur"/>
+    <feFlood flood-color="#CCAD42" flood-opacity="0.18"/>
+    <feComposite in2="offsetblur" operator="in"/>
+    <feMerge>
+      <feMergeNode/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+</defs>
+<!-- Ring with drop shadow -->
+<g filter="url(#goldShadow)">
+  <circle cx="180" cy="160" r="130" fill="none" stroke="url(#goldShine)" stroke-width="5"/>
+  <circle cx="180" cy="160" r="123" fill="none" stroke="#CCAD42" stroke-width="1" opacity="0.5"/>
+</g>
+
+<g transform="translate(180 160)" stroke="url(#goldShine)" stroke-linecap="round" stroke-linejoin="round">
+
+<path d="M-65 10 Q -65 -65 0 -65 Q 65 -65 65 10" fill="none" stroke-width="8"/>
+<rect x="-78" y="0" width="35" height="55" rx="6" fill="#CCAD42" fill-opacity="0.22" stroke-width="8"/>
+<rect x="43" y="0" width="35" height="55" rx="6" fill="#CCAD42" fill-opacity="0.22" stroke-width="8"/>
+<path d="M-78 30 Q -100 60 -50 75 L 0 75" fill="none" stroke-width="8"/>
+<circle cx="10" cy="75" r="9" fill="#CCAD42" stroke="none"/>
+
+</g>
+<!-- R10: caption bumped from 22 → 28 -->
+<text x="180" y="360" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="28" fill="#0A2F1F" letter-spacing="1.5">REAL-PERSON SUPPORT</text>
+<text x="180" y="400" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="500" font-size="17" fill="#6B6B6B" letter-spacing="0.5">We answer your email</text>
+</svg>

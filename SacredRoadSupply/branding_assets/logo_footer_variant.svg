@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" role="img" aria-label="Sacred Road Supply footer logo">
+  <defs>
+    <linearGradient id="goldShine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#F0D87C"/>
+    <stop offset="45%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="goldFlat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#7CC355"/>
+    <stop offset="65%" stop-color="#4A9D3F"/>
+    <stop offset="100%" stop-color="#1A4D26"/>
+  </linearGradient>
+  </defs>
+  <!-- Simplified medallion, no shield BG (assumes dark footer) -->
+  <g transform="translate(40 40)">
+    <circle cx="100" cy="100" r="95" fill="none" stroke="url(#goldShine)" stroke-width="4"/>
+    <g transform="translate(100 110)">
+      <path d="M-4,-30 Q-3,-10 -3,18 L-3,40 Q-4,46 -2,50 L2,50 Q4,46 3,40 L3,18 Q3,-10 4,-30 Z" fill="url(#goldShine)"/>
+      <path d="M-1.8,50 L-1.2,62.0 Q0.0,64.4 1.2,62.0 L1.8,50 Z" fill="url(#goldShine)"/>
+  <path d="M-2.7,50.0 Q-9.4,54.8 -13.2,59.6 Q-8.6,54.8 0.3,50.0 Z" fill="url(#goldShine)"/>
+  <path d="M-0.3,50.0 Q8.6,54.8 13.2,59.6 Q9.4,54.8 2.7,50.0 Z" fill="url(#goldShine)"/>
+  <path d="M-2.7,50.0 Q-13.5,51.8 -19.2,54.8 Q-12.9,51.8 -0.9,50.0 Z" fill="url(#goldFlat)" opacity="0.85"/>
+  <path d="M0.9,50.0 Q12.9,51.8 19.2,54.8 Q13.5,51.8 2.7,50.0 Z" fill="url(#goldFlat)" opacity="0.85"/>
+      <ellipse cx="0" cy="-36.5" rx="42.5" ry="46.8" fill="#1A4D26"/>
+  <ellipse cx="0" cy="-40.75" rx="38.2" ry="42.5" fill="url(#leaf)"/>
+  <path d="M-32.3,-28.9 Q-31.8,-30.4 -32.3,-44.1 Q-32.8,-42.6 -32.3,-28.9 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M32.3,-28.9 Q32.8,-42.6 32.3,-44.1 Q31.8,-30.4 32.3,-28.9 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M-25.5,-16.1 Q-23.4,-18.0 -25.5,-31.4 Q-27.6,-29.5 -25.5,-16.1 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M25.5,-16.1 Q27.6,-29.5 25.5,-31.4 Q23.4,-18.0 25.5,-16.1 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M-11.9,-12.7 Q-7.2,-16.8 -11.9,-26.3 Q-16.6,-22.2 -11.9,-12.7 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M11.9,-12.7 Q16.6,-22.2 11.9,-26.3 Q7.2,-16.8 11.9,-12.7 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M0.0,-8.0 Q5.8,-15.2 0.0,-22.5 Q-5.8,-15.2 0.0,-8.0 Z" fill="#4A9D3F" opacity="0.9"/>
+  <path d="M0.0,-69.7 Q-7.5,-79.0 0.0,-88.3 Q7.5,-79.0 0.0,-69.7 Z" fill="#7CC355"/>
+  <path d="M-12.8,-68.8 Q-18.9,-74.4 -12.8,-85.8 Q-6.6,-80.2 -12.8,-68.8 Z" fill="#7CC355"/>
+  <path d="M12.8,-68.8 Q6.6,-80.2 12.8,-85.8 Q18.9,-74.4 12.8,-68.8 Z" fill="#7CC355"/>
+  <path d="M-23.8,-61.1 Q-28.1,-64.5 -23.8,-76.5 Q-19.5,-73.1 -23.8,-61.1 Z" fill="#7CC355"/>
+  <path d="M23.8,-61.1 Q19.5,-73.1 23.8,-76.5 Q28.1,-64.5 23.8,-61.1 Z" fill="#7CC355"/>
+  <path d="M-35.7,-45.0 Q-37.5,-46.9 -35.7,-62.0 Q-33.9,-60.1 -35.7,-45.0 Z" fill="#7CC355"/>
+  <path d="M35.7,-45.0 Q33.9,-60.1 35.7,-62.0 Q37.5,-46.9 35.7,-45.0 Z" fill="#7CC355"/>
+  <path d="M-18.7,-55.2 Q-23.4,-59.3 -18.7,-68.8 Q-14.0,-64.7 -18.7,-55.2 Z" fill="#7CC355"/>
+  <path d="M18.7,-55.2 Q14.0,-64.7 18.7,-68.8 Q23.4,-59.3 18.7,-55.2 Z" fill="#7CC355"/>
+  <path d="M0.0,-69.7 Q-7.5,-79.0 0.0,-88.3 Q7.5,-79.0 0.0,-69.7 Z" fill="none" stroke="#F5F0E1" stroke-width="0.5" opacity="0.4"/>
+    </g>
+  </g>
+  <!-- Wordmark, cream on dark assumption -->
+  <g transform="translate(260 100)">
+    <text font-family="Georgia, serif" font-weight="700" font-size="48" fill="url(#goldShine)" letter-spacing="2">SACRED ROAD</text>
+    <text y="50" font-family="Georgia, serif" font-weight="700" font-size="48" fill="url(#leaf)" letter-spacing="2">SUPPLY</text>
+    <rect x="0" y="64" width="380" height="2" fill="url(#goldFlat)"/>
+    <text y="92" font-family="'Inter', Arial, sans-serif" font-weight="500" font-size="14" fill="#F5F0E1" letter-spacing="4">A SACRED PATHWAY BRAND</text>
+  </g>
+</svg>

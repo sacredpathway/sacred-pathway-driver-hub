@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<!--
+Sacred Road Supply — Abandoned Cart Recovery Series (3 emails)
+
+USAGE:
+- Shopify Email built-in only supports 1 cart email — use Email 1 there
+- Klaviyo supports the full 3-email flow — use all three in a single flow when you migrate (recommended at 500+ subscribers)
+
+TIMING:
+  Email 1: 1 hour after cart abandonment
+  Email 2: 24 hours after abandonment (only if cart not recovered)
+  Email 3: 72 hours after abandonment (only if cart not recovered)
+-->
+
+<!-- ========================================================== -->
+<!-- CART 1 — 1 hour                                            -->
+<!-- Subject: You left something in your truck                  -->
+<!-- ========================================================== -->
+
+<!-- CART 1 START -->
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F5F0E1;font-family:'Inter',Arial,sans-serif;">
+  <tr><td align="center" style="padding:24px;">
+    <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#FFFFFF;border-top:6px solid #CCAD42;">
+      <tr><td align="center" style="padding:32px 24px 16px;background:#0A2F1F;">
+        <div style="font-family:Georgia,'Playfair Display',serif;color:#CCAD42;font-weight:700;font-size:28px;letter-spacing:2px;">SACRED ROAD SUPPLY</div>
+      </td></tr>
+      <tr><td style="padding:40px 32px 24px;color:#1A1A1A;font-size:16px;line-height:1.6;">
+        <h1 style="font-family:Georgia,serif;font-size:28px;color:#1A4D26;margin:0 0 16px;">Looks like you stepped away mid-checkout.</h1>
+        <p style="margin:0 0 24px;">Your cart is still here — nothing's been charged yet.</p>
+
+        <!-- Cart items block (Shopify auto-fills) -->
+        <div style="background:#F5F5F5;border-left:4px solid #CCAD42;padding:16px;margin:24px 0;">
+          {{ cart_items }}
+          <div style="margin-top:12px;font-weight:700;color:#1A4D26;">Subtotal: {{ cart_subtotal }}</div>
+        </div>
+
+        <table cellpadding="0" cellspacing="0" border="0" align="left" style="margin:8px 0 24px;">
+          <tr><td style="background:#CCAD42;padding:14px 32px;border-radius:4px;">
+            <a href="{{ cart_url }}" style="color:#121212;text-decoration:none;font-weight:700;font-size:16px;letter-spacing:1px;">FINISH MY ORDER →</a>
+          </td></tr>
+        </table>
+        <p style="clear:both;margin:24px 0 0;">If something's wrong with the order or you have a question, hit reply. A real person reads every email.</p>
+        <p style="margin:16px 0 0;">— Sacred Road Supply</p>
+      </td></tr>
+      <tr><td style="background:#0A2F1F;color:#F5F0E1;padding:24px;text-align:center;font-size:12px;">
+        Sacred Pathway LLC · Greensboro, AL 36744 · <a href="{{unsubscribe_url}}" style="color:#E6CC73;">Unsubscribe</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+<!-- CART 1 END -->
+
+
+<!-- ========================================================== -->
+<!-- CART 2 — 24 hours                                         -->
+<!-- Subject: Still here — here's $5 off if it helps           -->
+<!-- ========================================================== -->
+
+<!-- CART 2 START -->
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F5F0E1;font-family:'Inter',Arial,sans-serif;">
+  <tr><td align="center" style="padding:24px;">
+    <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#FFFFFF;border-top:6px solid #CCAD42;">
+      <tr><td align="center" style="padding:32px 24px 16px;background:#0A2F1F;">
+        <div style="font-family:Georgia,'Playfair Display',serif;color:#CCAD42;font-weight:700;font-size:28px;letter-spacing:2px;">SACRED ROAD SUPPLY</div>
+      </td></tr>
+      <tr><td style="padding:40px 32px 24px;color:#1A1A1A;font-size:16px;line-height:1.6;">
+        <h1 style="font-family:Georgia,serif;font-size:28px;color:#1A4D26;margin:0 0 16px;">Your cart's still saved.</h1>
+        <p style="margin:0 0 16px;">If price is the holdup, here's $5 off to push it over the line:</p>
+
+        <div style="background:#F5F5F5;border-left:4px solid #CCAD42;padding:16px;margin:24px 0;">
+          <div style="font-size:14px;color:#6B6B6B;margin-bottom:4px;">YOUR CODE (48 hours)</div>
+          <div style="font-family:monospace;font-size:24px;color:#1A4D26;font-weight:700;letter-spacing:2px;">ROADSAVE</div>
+        </div>
+
+        <table cellpadding="0" cellspacing="0" border="0" align="left" style="margin:8px 0 24px;">
+          <tr><td style="background:#CCAD42;padding:14px 32px;border-radius:4px;">
+            <a href="{{ cart_url }}?discount=ROADSAVE" style="color:#121212;text-decoration:none;font-weight:700;font-size:16px;letter-spacing:1px;">APPLY $5 OFF & FINISH →</a>
+          </td></tr>
+        </table>
+        <p style="clear:both;margin:24px 0 0;">— Sacred Road Supply</p>
+      </td></tr>
+      <tr><td style="background:#0A2F1F;color:#F5F0E1;padding:24px;text-align:center;font-size:12px;">
+        <a href="{{unsubscribe_url}}" style="color:#E6CC73;">Unsubscribe</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+<!-- CART 2 END -->
+
+
+<!-- ========================================================== -->
+<!-- CART 3 — 72 hours                                         -->
+<!-- Subject: Last call — restocking soon                      -->
+<!-- ========================================================== -->
+
+<!-- CART 3 START -->
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F5F0E1;font-family:'Inter',Arial,sans-serif;">
+  <tr><td align="center" style="padding:24px;">
+    <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#FFFFFF;border-top:6px solid #CCAD42;">
+      <tr><td align="center" style="padding:32px 24px 16px;background:#0A2F1F;">
+        <div style="font-family:Georgia,'Playfair Display',serif;color:#CCAD42;font-weight:700;font-size:28px;letter-spacing:2px;">SACRED ROAD SUPPLY</div>
+      </td></tr>
+      <tr><td style="padding:40px 32px 24px;color:#1A1A1A;font-size:16px;line-height:1.6;">
+        <h1 style="font-family:Georgia,serif;font-size:28px;color:#1A4D26;margin:0 0 16px;">We restock these about every 10 days.</h1>
+        <p style="margin:0 0 16px;">The items in your cart are running low — once they're gone they ship in 10–14 days instead of 3–5.</p>
+
+        <div style="background:#F5F5F5;border-left:4px solid #CCAD42;padding:16px;margin:24px 0;">
+          {{ cart_items }}
+        </div>
+
+        <p style="margin:0 0 16px;">Your $5 code is still good through tomorrow night:</p>
+        <div style="font-family:monospace;font-size:20px;color:#1A4D26;font-weight:700;letter-spacing:2px;text-align:center;background:#F5F5F5;padding:12px;margin:0 0 24px;">ROADSAVE</div>
+
+        <table cellpadding="0" cellspacing="0" border="0" align="left" style="margin:8px 0 24px;">
+          <tr><td style="background:#CCAD42;padding:14px 32px;border-radius:4px;">
+            <a href="{{ cart_url }}?discount=ROADSAVE" style="color:#121212;text-decoration:none;font-weight:700;font-size:16px;letter-spacing:1px;">FINISH MY ORDER →</a>
+          </td></tr>
+        </table>
+        <p style="clear:both;margin:24px 0 0;">— Sacred Road Supply</p>
+      </td></tr>
+      <tr><td style="background:#0A2F1F;color:#F5F0E1;padding:24px;text-align:center;font-size:12px;">
+        <a href="{{unsubscribe_url}}" style="color:#E6CC73;">Unsubscribe</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+<!-- CART 3 END -->
+
+
+<!--
+SETUP NOTES:
+
+1. SHOPIFY EMAIL (built-in, v1):
+   - Only supports 1 abandoned cart email at 10-hour delay
+   - Settings → Notifications → Abandoned checkout email
+   - Paste CART 1 HTML above into the body field
+   - Adjust delay to 1 hour if Shopify allows custom (Basic plan = locked at 10 hours)
+
+2. KLAVIYO (when you migrate at 500+ subs):
+   - Flows → Create flow → Abandoned cart
+   - Add Trigger: "Started Checkout" event
+   - Email 1 delay: 1 hour
+   - Conditional split: cart not recovered → continue
+   - Email 2 delay: 24 hours
+   - Conditional split: cart not recovered → continue
+   - Email 3 delay: 72 hours
+   - End
+
+3. DISCOUNT CODE ROADSAVE setup:
+   - Discounts → Create discount → Amount off → $5
+   - Code: ROADSAVE
+   - Limit: One use per customer
+   - Min purchase: $20
+
+EXPECTED RECOVERY RATE (industry baseline):
+- 1-email flow (Shopify Email default): 5-8% of carts recovered
+- 3-email flow (Klaviyo): 10-15% of carts recovered
+- The $5 incentive in Cart 2 typically lifts the second-touch open-and-convert rate by ~40%.
+-->

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2880 1200" role="img" aria-label="Sacred Road Supply hero">
+  <defs>
+    <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#0a1b2e"/>
+      <stop offset="40%" stop-color="#1f2c3d"/>
+      <stop offset="65%" stop-color="#7a5a32"/>
+      <stop offset="90%" stop-color="#e6a04a"/>
+      <stop offset="100%" stop-color="#3a2b1c"/>
+    </linearGradient>
+    <linearGradient id="roadGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#1a1814"/>
+      <stop offset="100%" stop-color="#121212"/>
+    </linearGradient>
+    <linearGradient id="goldShine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#F0D87C"/>
+    <stop offset="45%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="goldFlat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#E6CC73"/>
+    <stop offset="100%" stop-color="#CCAD42"/>
+  </linearGradient>
+    <linearGradient id="trustBand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A2F1F" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#051B12" stop-opacity="0.98"/>
+    </linearGradient>
+    <linearGradient id="darkLeft" x1="0" y1="0.5" x2="1" y2="0.5">
+      <stop offset="0%" stop-color="#051B12" stop-opacity="0.8"/>
+      <stop offset="65%" stop-color="#0A2F1F" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0A2F1F" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Placeholder scene -->
+  <rect width="2880" height="1200" fill="url(#skyGrad)"/>
+  <path d="M0 720 L320 600 L520 660 L760 540 L1000 640 L1240 580 L1500 660 L1780 580 L2080 640 L2360 590 L2620 650 L2880 600 L2880 800 L0 800 Z" fill="#1a2030" opacity="0.85"/>
+  <path d="M1100 780 L1780 780 L2200 1200 L680 1200 Z" fill="url(#roadGrad)"/>
+  <g fill="url(#goldFlat)" opacity="0.95">
+    <path d="M1430 800 L1450 800 L1454 830 L1426 830 Z"/>
+    <path d="M1418 870 L1462 870 L1468 910 L1412 910 Z"/>
+    <path d="M1402 950 L1478 950 L1488 1000 L1392 1000 Z"/>
+    <path d="M1382 1040 L1498 1040 L1512 1110 L1368 1110 Z"/>
+  </g>
+  <rect x="0" y="980" width="2880" height="220" fill="#051B12" opacity="0.55"/>
+  <path d="M-100 1200 Q 420 940 940 1080 Q 1100 1130 1100 1200 Z" fill="#121212" opacity="0.45"/>
+
+  <!-- Gold particle layer (R12) -->
+  <circle cx="1546" cy="234" r="3.2" fill="#F0D87C" opacity="0.16"/>
+  <circle cx="2414" cy="176" r="3.1" fill="#F0D87C" opacity="0.17"/>
+  <circle cx="2298" cy="299" r="2.1" fill="#F0D87C" opacity="0.28"/>
+  <circle cx="506" cy="326" r="2.3" fill="#F0D87C" opacity="0.28"/>
+  <circle cx="2536" cy="206" r="4.8" fill="#F0D87C" opacity="0.34"/>
+  <circle cx="2607" cy="143" r="3.7" fill="#F0D87C" opacity="0.27"/>
+  <circle cx="1125" cy="127" r="3.7" fill="#F0D87C" opacity="0.19"/>
+  <circle cx="1936" cy="227" r="3.6" fill="#F0D87C" opacity="0.32"/>
+  <circle cx="2514" cy="915" r="4.0" fill="#F0D87C" opacity="0.18"/>
+  <circle cx="2559" cy="734" r="2.6" fill="#F0D87C" opacity="0.18"/>
+  <circle cx="477" cy="657" r="2.2" fill="#F0D87C" opacity="0.21"/>
+  <circle cx="2397" cy="517" r="4.3" fill="#F0D87C" opacity="0.29"/>
+  <circle cx="2076" cy="450" r="2.9" fill="#F0D87C" opacity="0.39"/>
+  <circle cx="1219" cy="163" r="3.7" fill="#F0D87C" opacity="0.31"/>
+
+  <!-- Headline overlay gradient -->
+  <rect width="2880" height="1200" fill="url(#darkLeft)"/>
+
+  <g transform="translate(220,360)">
+    <text x="0" y="0" font-family="Georgia, 'Playfair Display', serif" font-weight="700" font-size="120" fill="#F5F0E1" letter-spacing="-2">Gear Built for</text>
+    <text x="0" y="130" font-family="Georgia, 'Playfair Display', serif" font-weight="700" font-size="120" fill="#F5F0E1" letter-spacing="-2">the Long Haul.</text>
+    <rect x="0" y="170" width="240" height="6" fill="url(#goldShine)"/>
+    <!-- R1 FIX: subhead now CREAM not srsGoldHighlight -->
+    <text x="0" y="240" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="500" font-size="34" fill="#F5F0E1">Trucker-tested supplies, fast U.S. shipping, and prices</text>
+    <text x="0" y="290" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="500" font-size="34" fill="#F5F0E1">that respect what you actually take home.</text>
+    <g transform="translate(0,360)">
+      <rect width="280" height="80" rx="6" fill="url(#goldFlat)"/>
+      <text x="140" y="52" text-anchor="middle" font-family="'Inter', Arial, sans-serif" font-weight="700" font-size="26" fill="#0A2F1F" letter-spacing="2">SHOP NOW</text>
+    </g>
+    <g transform="translate(310,360)">
+      <rect width="380" height="80" rx="6" fill="none" stroke="#F5F0E1" stroke-width="2"/>
+      <text x="190" y="52" text-anchor="middle" font-family="'Inter', Arial, sans-serif" font-weight="600" font-size="22" fill="#F5F0E1" letter-spacing="1.5">NEW DRIVER? START HERE</text>
+    </g>
+  </g>
+
+  <rect x="0" y="1080" width="2880" height="120" fill="url(#trustBand)"/>
+  <g font-family="'Inter', Arial, sans-serif" font-weight="600" font-size="28" fill="#F5F0E1" letter-spacing="3">
+    <text x="500" y="1156" text-anchor="middle">FREE SHIPPING $75+</text>
+    <text x="1440" y="1156" text-anchor="middle">SHIPS FROM U.S. WAREHOUSES</text>
+    <text x="2380" y="1156" text-anchor="middle">30-DAY RETURNS</text>
+  </g>
+  <g fill="url(#goldShine)">
+    <rect x="940" y="1118" width="2" height="44"/>
+    <rect x="1940" y="1118" width="2" height="44"/>
+  </g>
+</svg>
