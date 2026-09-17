@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { APP_STORE_URL } from "@/lib/constants";
 
 // Three auth modes, all backed by Supabase:
 //   • password   — primary. Same email+password the iOS app accepts.
@@ -184,7 +185,7 @@ export default function SignInForm({ nextPath }: { nextPath: string }) {
       <p className="pt-2 text-center text-xs text-sp-textSecondary">
         Need an account? Sign up on the{" "}
         <Link
-          href="https://apps.apple.com/app/sacred-pathway-driver-hub/id0000000000"
+          href={APP_STORE_URL}
           className="text-sp-gold hover:underline"
         >
           iPhone app
