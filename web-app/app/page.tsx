@@ -3,6 +3,8 @@
 
 import Link from "next/link";
 
+import { APP_STORE_URL } from "@/lib/constants";
+
 export const runtime = "edge";
 
 export default function LandingPage() {
@@ -24,7 +26,7 @@ export default function LandingPage() {
           Sign In
         </Link>
         <a
-          href="https://apps.apple.com/app/id0000000000"
+          href={APP_STORE_URL}
           className="text-xs text-sp-textSecondary underline-offset-2 hover:underline"
         >
           Get the iPhone app
