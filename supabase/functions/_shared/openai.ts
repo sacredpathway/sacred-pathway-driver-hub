@@ -11,9 +11,9 @@ export interface ChatMessage {
 export type ChatContentPart =
   | { type: "text"; text: string }
   | {
-      type: "image_url";
-      image_url: { url: string; detail?: "auto" | "low" | "high" };
-    };
+    type: "image_url";
+    image_url: { url: string; detail?: "auto" | "low" | "high" };
+  };
 
 export interface ChatRequestOptions {
   model: string;
@@ -41,7 +41,10 @@ export async function chatCompletion(
 ): Promise<ChatResult> {
   const key = opts.apiKey ?? Deno.env.get("OPENAI_API_KEY");
   if (!key) {
-    throw new ChatError("missing_api_key", "OPENAI_API_KEY is not set on the Edge Function.");
+    throw new ChatError(
+      "missing_api_key",
+      "OPENAI_API_KEY is not set on the Edge Function.",
+    );
   }
 
   const body: Record<string, unknown> = {
@@ -83,7 +86,10 @@ export async function chatCompletion(
       const choice = json.choices?.[0];
       const content = choice?.message?.content;
       if (!content) {
-        throw new ChatError("empty_response", "OpenAI returned an empty message.");
+        throw new ChatError(
+          "empty_response",
+          "OpenAI returned an empty message.",
+        );
       }
       return {
         content,
@@ -101,7 +107,10 @@ export async function chatCompletion(
         throw err;
       }
       // Network / DNS / abort — retry a couple times then bail.
-      const wrapped = new ChatError("network", (err as Error).message ?? String(err));
+      const wrapped = new ChatError(
+        "network",
+        (err as Error).message ?? String(err),
+      );
       if (attempt < retry.attempts - 1) {
         lastError = wrapped;
         await sleep(retry.baseDelayMs * Math.pow(2, attempt), attempt);
@@ -110,14 +119,16 @@ export async function chatCompletion(
       throw wrapped;
     }
   }
-  throw lastError ?? new ChatError("unknown", "chatCompletion exhausted retries.");
+  throw lastError ??
+    new ChatError("unknown", "chatCompletion exhausted retries.");
 }
 
 function shouldRetry(status: number): boolean {
-  return status === 408 || status === 425 || status === 429 || (status >= 500 && status < 600);
+  return status === 408 || status === 425 || status === 429 ||
+    (status >= 500 && status < 600);
 }
 
-function sleep(ms: number, attempt: number): Promise<void> {
+function sleep(ms: number, _attempt: number): Promise<void> {
   // 20% jitter on top of exponential back-off to avoid thundering herd.
   const jitter = 0.8 + Math.random() * 0.4;
   return new Promise((resolve) => setTimeout(resolve, ms * jitter));

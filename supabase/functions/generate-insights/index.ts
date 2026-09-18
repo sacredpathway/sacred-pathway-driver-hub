@@ -19,7 +19,7 @@
 // Signing Keys migration that issues ES256 tokens.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 import { jsonResponse, withCors } from "../_shared/cors.ts";
-import { ChatError, chatCompletion } from "../_shared/openai.ts";
+import { chatCompletion, ChatError } from "../_shared/openai.ts";
 
 const MODEL = Deno.env.get("OPENAI_TEXT_MODEL") ?? "gpt-4o-mini";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -53,7 +53,11 @@ Deno.serve(withCors(async (req) => {
   }
   const prompt = (payload.prompt ?? "").trim();
   if (!prompt) {
-    return jsonResponse({ ok: false, code: "bad_request", message: "prompt required" }, 400);
+    return jsonResponse({
+      ok: false,
+      code: "bad_request",
+      message: "prompt required",
+    }, 400);
   }
   if (prompt.length > MAX_PROMPT_LEN) {
     return jsonResponse({ ok: false, code: "prompt_too_long" }, 413);
@@ -66,7 +70,11 @@ Deno.serve(withCors(async (req) => {
       maxTokens: 512,
       temperature: 0.4,
     });
-    return jsonResponse({ ok: true, text: result.content, model: result.model });
+    return jsonResponse({
+      ok: true,
+      text: result.content,
+      model: result.model,
+    });
   } catch (err) {
     const e = err as ChatError;
     return jsonResponse(

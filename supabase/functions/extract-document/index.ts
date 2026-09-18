@@ -49,8 +49,7 @@ type ErrorCode =
 const USER_MESSAGE: Record<ErrorCode, string> = {
   SCAN_TEMPORARILY_UNAVAILABLE:
     "Document scanning is temporarily unavailable. Tap Enter Manually to add this one by hand.",
-  RATE_LIMITED:
-    "Too many scans at once. Wait a few seconds and tap Try Again.",
+  RATE_LIMITED: "Too many scans at once. Wait a few seconds and tap Try Again.",
   TIMEOUT: "That took too long. Tap Try Again, or enter manually.",
   AUTH_EXPIRED: "Your session expired. Sign out and sign back in.",
   UNKNOWN_SCAN_ERROR:
@@ -160,7 +159,12 @@ Deno.serve(withCors(async (req) => {
 
   try {
     if (req.method !== "POST") {
-      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "method", `method=${req.method}`);
+      return errorResponse(
+        traceId,
+        "UNKNOWN_SCAN_ERROR",
+        "method",
+        `method=${req.method}`,
+      );
     }
 
     // ---- 1. Authenticate ----
@@ -169,7 +173,12 @@ Deno.serve(withCors(async (req) => {
       ? authHeader.slice(7).trim()
       : "";
     if (!jwt) {
-      return errorResponse(traceId, "AUTH_EXPIRED", "auth", "missing bearer token");
+      return errorResponse(
+        traceId,
+        "AUTH_EXPIRED",
+        "auth",
+        "missing bearer token",
+      );
     }
 
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
@@ -178,7 +187,12 @@ Deno.serve(withCors(async (req) => {
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData?.user) {
-      return errorResponse(traceId, "AUTH_EXPIRED", "auth", `getUser: ${clip(userErr?.message ?? "nil user")}`);
+      return errorResponse(
+        traceId,
+        "AUTH_EXPIRED",
+        "auth",
+        `getUser: ${clip(userErr?.message ?? "nil user")}`,
+      );
     }
     const userId = userData.user.id;
     log(traceId, "auth_ok", { userId });
@@ -188,11 +202,21 @@ Deno.serve(withCors(async (req) => {
     try {
       body = await req.json();
     } catch (err) {
-      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "bad_json", clip((err as Error).message));
+      return errorResponse(
+        traceId,
+        "UNKNOWN_SCAN_ERROR",
+        "bad_json",
+        clip((err as Error).message),
+      );
     }
     const documentId = body.document_id;
     if (!documentId || typeof documentId !== "string") {
-      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "missing_document_id", "");
+      return errorResponse(
+        traceId,
+        "UNKNOWN_SCAN_ERROR",
+        "missing_document_id",
+        "",
+      );
     }
     log(traceId, "input_ok", { documentId });
 
@@ -214,7 +238,10 @@ Deno.serve(withCors(async (req) => {
     if (docRow.profile_id !== userId) {
       return errorResponse(traceId, "AUTH_EXPIRED", "profile_mismatch", "");
     }
-    log(traceId, "row_loaded", { storage_path: docRow.storage_path, status: docRow.status });
+    log(traceId, "row_loaded", {
+      storage_path: docRow.storage_path,
+      status: docRow.status,
+    });
 
     // ---- 4. Download file using service role ----
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE, {
@@ -231,8 +258,17 @@ Deno.serve(withCors(async (req) => {
       .download(docRow.storage_path);
 
     if (dlErr || !fileBlob) {
-      await markFailed(adminClient, documentId, `storage_download: ${dlErr?.message}`);
-      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "storage_download", clip(dlErr?.message ?? "nil blob"));
+      await markFailed(
+        adminClient,
+        documentId,
+        `storage_download: ${dlErr?.message}`,
+      );
+      return errorResponse(
+        traceId,
+        "UNKNOWN_SCAN_ERROR",
+        "storage_download",
+        clip(dlErr?.message ?? "nil blob"),
+      );
     }
 
     const contentType = fileBlob.type || guessContentType(docRow.storage_path);
@@ -240,10 +276,23 @@ Deno.serve(withCors(async (req) => {
     log(traceId, "file_downloaded", { contentType, fileSize });
 
     // ---- 4b. Validate file type and size BEFORE the provider call ----
-    const validation = validateFileType(contentType, docRow.storage_path, fileSize);
+    const validation = validateFileType(
+      contentType,
+      docRow.storage_path,
+      fileSize,
+    );
     if (!validation.ok) {
-      await markFailed(adminClient, documentId, `unsupported_file_type: ${validation.reason}`);
-      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "validate", clip(validation.reason ?? ""));
+      await markFailed(
+        adminClient,
+        documentId,
+        `unsupported_file_type: ${validation.reason}`,
+      );
+      return errorResponse(
+        traceId,
+        "UNKNOWN_SCAN_ERROR",
+        "validate",
+        clip(validation.reason ?? ""),
+      );
     }
 
     const imageDataUrl = await toDataUrl(fileBlob, contentType);
@@ -252,7 +301,12 @@ Deno.serve(withCors(async (req) => {
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openaiKey) {
       await markFailed(adminClient, documentId, "missing OPENAI_API_KEY");
-      return errorResponse(traceId, "SCAN_TEMPORARILY_UNAVAILABLE", "missing_key", "OPENAI_API_KEY not set");
+      return errorResponse(
+        traceId,
+        "SCAN_TEMPORARILY_UNAVAILABLE",
+        "missing_key",
+        "OPENAI_API_KEY not set",
+      );
     }
 
     let raw: string;
@@ -275,7 +329,9 @@ Deno.serve(withCors(async (req) => {
     } catch (err) {
       const mapped = classifyProviderError(err);
       const anyErr = err as any;
-      const technical = clip(`${anyErr?.status ?? ""} ${anyErr?.message ?? String(err)}`);
+      const technical = clip(
+        `${anyErr?.status ?? ""} ${anyErr?.message ?? String(err)}`,
+      );
       await markFailed(adminClient, documentId, `provider: ${technical}`);
       return errorResponse(traceId, mapped, "openai", technical);
     }
@@ -315,7 +371,9 @@ Deno.serve(withCors(async (req) => {
       }
     }
 
-    const terminalStatus = parseStage === "fallback" ? "pending_manual_review" : "processed";
+    const terminalStatus = parseStage === "fallback"
+      ? "pending_manual_review"
+      : "processed";
     const confidence = parseStage === "fallback"
       ? "low"
       : ((extracted?.confidence as string | undefined) ?? "medium");
@@ -335,14 +393,24 @@ Deno.serve(withCors(async (req) => {
         document_type: documentType,
         provider: "openai",
         model: modelUsed,
-        retry_count: (docRow.retry_count ?? 0) + (docRow.status === "failed" ? 1 : 0),
+        retry_count: (docRow.retry_count ?? 0) +
+          (docRow.status === "failed" ? 1 : 0),
         error_message: null,
       })
       .eq("id", documentId);
 
     if (updateErr) {
-      await markFailed(adminClient, documentId, `db_update: ${updateErr.message}`);
-      return errorResponse(traceId, "UNKNOWN_SCAN_ERROR", "db_update", clip(updateErr.message));
+      await markFailed(
+        adminClient,
+        documentId,
+        `db_update: ${updateErr.message}`,
+      );
+      return errorResponse(
+        traceId,
+        "UNKNOWN_SCAN_ERROR",
+        "db_update",
+        clip(updateErr.message),
+      );
     }
 
     const elapsed = Date.now() - t0;
@@ -439,7 +507,9 @@ async function callOpenAI(
     const json = await res.json();
     const choice = json.choices?.[0];
     const content = choice?.message?.content;
-    if (!content || typeof content !== "string" || content.trim().length === 0) {
+    if (
+      !content || typeof content !== "string" || content.trim().length === 0
+    ) {
       const err = new Error("empty response from provider");
       (err as any).status = res.status;
       throw err;
@@ -457,10 +527,14 @@ async function callOpenAI(
 function classifyProviderError(err: unknown): ErrorCode {
   const anyErr = err as any;
   const status: number | undefined = anyErr?.status;
-  const raw: string = (anyErr?.rawBody ?? anyErr?.message ?? "").toString().toLowerCase();
+  const raw: string = (anyErr?.rawBody ?? anyErr?.message ?? "").toString()
+    .toLowerCase();
   const name: string = (anyErr?.name ?? "").toString();
 
-  if (name === "AbortError" || raw.includes("aborted") || raw.includes("timed out")) {
+  if (
+    name === "AbortError" || raw.includes("aborted") ||
+    raw.includes("timed out")
+  ) {
     return "TIMEOUT";
   }
   if (
@@ -474,7 +548,9 @@ function classifyProviderError(err: unknown): ErrorCode {
   ) {
     return "SCAN_TEMPORARILY_UNAVAILABLE";
   }
-  if (status === 429 || raw.includes("rate limit") || raw.includes("rate_limited")) {
+  if (
+    status === 429 || raw.includes("rate limit") || raw.includes("rate_limited")
+  ) {
     return "RATE_LIMITED";
   }
   if (status === 401 || status === 403 || raw.includes("invalid_api_key")) {
@@ -515,11 +591,17 @@ const ALLOWED_MIMES = new Set<string>([
 ]);
 
 const ALLOWED_EXTENSIONS = new Set<string>([
-  "jpg", "jpeg", "png", "webp", "gif", "heic", "heif",
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "heic",
+  "heif",
 ]);
 
-const MIN_FILE_BYTES = 1024;              // 1 KB floor — anything smaller is garbage
-const MAX_FILE_BYTES = 20 * 1024 * 1024;  // 20 MB ceiling — OpenAI's hard limit
+const MIN_FILE_BYTES = 1024; // 1 KB floor — anything smaller is garbage
+const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB ceiling — OpenAI's hard limit
 
 interface FileValidationResult {
   ok: boolean;

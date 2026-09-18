@@ -33,7 +33,10 @@ export function withCors(
       });
     } catch (err) {
       console.error("[withCors] uncaught:", err);
-      return jsonResponse({ error: (err as Error).message ?? "unknown error" }, 500);
+      return jsonResponse(
+        { error: (err as Error).message ?? "unknown error" },
+        500,
+      );
     }
   };
 }
