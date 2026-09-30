@@ -9,6 +9,7 @@ import {
   loadStatusLabel,
   settlementEligibility,
   statusOptionsFor,
+  NEW_LOAD_STATUS,
 } from "./status";
 import { LOAD_STATUSES, LOAD_STATUS_OPTIONS } from "@/app/(app)/loads/constants";
 
@@ -87,5 +88,26 @@ describe("cancelled write gate (Phase 0.5)", () => {
     expect(isAllowedStatusWrite("pending", "pending")).toBe(true);
     expect(isAllowedStatusWrite("pending", "assigned")).toBe(false);
     expect(isAllowedStatusWrite("", "cancelled")).toBe(true); // clearing keeps prior edit-form behaviour
+  });
+});
+
+describe("NEW_LOAD_STATUS — delivered, pay-eligible, not yet paid", () => {
+  it("is an existing, web-writable status (no second status system, passes the gate)", () => {
+    expect(KNOWN_LOAD_STATUSES).toContain(NEW_LOAD_STATUS);
+    expect(isWritableLoadStatus(NEW_LOAD_STATUS)).toBe(true);
+    expect(isAllowedStatusWrite(NEW_LOAD_STATUS, null)).toBe(true);
+  });
+
+  it("counts as completed for settlement immediately — no delivery-date wait", () => {
+    // Mirrors iOS SettlementWorkflowService.isCompleted: .readyForSettlement → true.
+    expect(settlementEligibility(NEW_LOAD_STATUS)).toBe("completed");
+    // `delivered` would only be eligible once delivery_date <= today on iOS.
+    expect(settlementEligibility("delivered")).toBe("after_delivery_date");
+  });
+
+  it("is not settled (still shows in pay pickers) and not cancelled", () => {
+    expect(loadStatusGroup(NEW_LOAD_STATUS)).toBe("completed");
+    expect(loadStatusGroup(NEW_LOAD_STATUS)).not.toBe("settled");
+    expect(isCancelledStatus(NEW_LOAD_STATUS)).toBe(false);
   });
 });

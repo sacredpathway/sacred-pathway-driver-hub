@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildCreateLoadPayload } from "./payloads";
 import { FieldError } from "./formFields";
 import { LOADS_PRODUCTION_COLUMNS, unknownLoadColumns } from "./schema";
+import { NEW_LOAD_STATUS } from "./status";
 
 function form(values: Record<string, string>): FormData {
   const f = new FormData();
@@ -9,10 +10,10 @@ function form(values: Record<string, string>): FormData {
   return f;
 }
 
-// Every field the New Load form can submit (NewLoadForm.tsx).
+// Every field the New Load form can submit (NewLoadForm.tsx). No status —
+// the form has no status control any more (entered load = delivered load).
 const FULL = {
   load_number: "451223",
-  status: "assigned",
   broker_name: "Acme Logistics LLC",
   broker_mc_number: "123456",
   broker_contact_name: "Aaron Dini",
@@ -68,14 +69,31 @@ describe("buildCreateLoadPayload — New Load insert contract", () => {
     expect(payload.total_revenue).toBe(2625);           // auto-sum when blank
     expect(payload.truck_id).toBe("aaaaaaaa-2222-4333-8444-555555555555");
     expect(payload.trailer_id).toBeNull();
-    expect(payload.status).toBe("assigned");
   });
 
-  it("defaults status to unassigned and rejects cancelled / invalid input", () => {
-    expect(buildCreateLoadPayload(form({ load_number: "1" })).payload.status).toBe("unassigned");
-    expect(() => buildCreateLoadPayload(form({ status: "cancelled" }))).toThrow(FieldError);
+  it("rejects invalid paperwork input (unchanged validation)", () => {
     expect(() => buildCreateLoadPayload(form({ pickup_date: "09/28/2026" }))).toThrow(FieldError);
     expect(() => buildCreateLoadPayload(form({ total_miles: "-5" }))).toThrow(FieldError);
     expect(() => buildCreateLoadPayload(form({ driver_id: "not-a-uuid" }))).toThrow(FieldError);
+  });
+});
+
+describe("New Load status — entered load = delivered load", () => {
+  it("every new load is saved as ready_for_settlement", () => {
+    expect(NEW_LOAD_STATUS).toBe("ready_for_settlement");
+    expect(buildCreateLoadPayload(form(FULL)).payload.status).toBe(NEW_LOAD_STATUS);
+    expect(buildCreateLoadPayload(form({ load_number: "1" })).payload.status).toBe(NEW_LOAD_STATUS);
+  });
+
+  it("ignores any submitted status — the user can't pick one, and a crafted post can't either", () => {
+    for (const st of ["unassigned", "assigned", "in_transit", "picked_up", "delivered", "settled", "cancelled", "junk"]) {
+      expect(buildCreateLoadPayload(form({ ...FULL, status: st })).payload.status).toBe(NEW_LOAD_STATUS);
+    }
+  });
+
+  it("the insert still contains only production columns with the status set", () => {
+    const { payload } = buildCreateLoadPayload(form(FULL));
+    expect(unknownLoadColumns({ ...payload, profile_id: "00000000-0000-4000-8000-000000000000" })).toEqual([]);
+    expect(Object.keys(payload)).toContain("status");
   });
 });

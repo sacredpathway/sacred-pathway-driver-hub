@@ -211,3 +211,24 @@ export function loadStatusTone(raw: string | null | undefined): LoadStatusTone {
   if (!v) return "neutral";
   return isKnownLoadStatus(v) ? TONES[v as KnownLoadStatus] : "unknown";
 }
+
+// -----------------------------------------------------------------------------
+//  New Load status (owner rule, 2026-09-30): "entered load = delivered load".
+// -----------------------------------------------------------------------------
+//  A load created from the web New Load form is documented from its paperwork,
+//  i.e. it is already delivered. The form no longer asks for a status; the
+//  server always writes this EXISTING value — no new status is introduced.
+//
+//  Why `ready_for_settlement` (not `delivered`):
+//    • iOS `LoadStatus` (every shipped build) parses it as `.readyForSettlement`
+//      and `SettlementWorkflowService.isCompleted` returns true immediately,
+//      so the load is settlement/driver-pay eligible right away.
+//    • `delivered` is not an iOS enum case: iOS falls back to assigned/
+//      unassigned and only treats it as complete once delivery_date <= today
+//      (never, if the date is blank) — and older builds label it "Assigned".
+//    • It is web-writable (passes the Phase 0.5 compatibility gate).
+//    • settlementEligibility() === "completed"; not "settled", so pay has not
+//      been issued yet and it still shows in paystub/settlement pickers.
+// -----------------------------------------------------------------------------
+
+export const NEW_LOAD_STATUS = "ready_for_settlement" as const satisfies WritableLoadStatus;

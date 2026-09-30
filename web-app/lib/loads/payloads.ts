@@ -7,8 +7,8 @@
 //  lib/loads/payloads.test.ts proves both against the schema contract.
 // =============================================================================
 
-import { FieldError, date, maybeUuid, num, s } from "./formFields";
-import { LOAD_STATUSES } from "@/app/(app)/loads/constants";
+import { date, maybeUuid, num, s } from "./formFields";
+import { NEW_LOAD_STATUS } from "./status";
 import type { BrokerContactInput } from "@/lib/brokers/contact";
 
 export interface CreateLoadPayload {
@@ -35,13 +35,14 @@ export interface BuiltCreateLoad {
   brokerContact: BrokerContactInput;
 }
 
-/** Throws FieldError on invalid input (same messages as before). */
+/**
+ * Throws FieldError on invalid input (same messages as before).
+ *
+ * Status is NOT read from the form: an entered load is a delivered load, so
+ * every new load is saved with NEW_LOAD_STATUS (see lib/loads/status.ts).
+ * Any `status` field in the submission is ignored.
+ */
 export function buildCreateLoadPayload(formData: FormData): BuiltCreateLoad {
-  const statusRaw = s(formData, "status") ?? "unassigned";
-  if (!(LOAD_STATUSES as ReadonlyArray<string>).includes(statusRaw)) {
-    throw new FieldError("status", `Status must be one of: ${LOAD_STATUSES.join(", ")}.`);
-  }
-
   const payload: CreateLoadPayload = {
     load_number:         s(formData, "load_number"),
     broker_name:         s(formData, "broker_name"),
@@ -55,7 +56,7 @@ export function buildCreateLoadPayload(formData: FormData): BuiltCreateLoad {
     fuel_surcharge:      num(formData, "fuel_surcharge",      { nonNegative: true, label: "Fuel surcharge" }),
     accessorial_charges: num(formData, "accessorial_charges", { nonNegative: true, label: "Accessorials" }),
     total_revenue:       num(formData, "total_revenue",       { nonNegative: true, label: "Total revenue" }),
-    status:              statusRaw,
+    status:              NEW_LOAD_STATUS,
     driver_id:           maybeUuid(formData, "driver_id",  "Driver"),
     truck_id:            maybeUuid(formData, "truck_id",   "Truck"),
     trailer_id:          maybeUuid(formData, "trailer_id", "Trailer"),

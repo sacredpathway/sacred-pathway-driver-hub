@@ -23,3 +23,14 @@ describe("recent loads", () => {
     expect(total).toBe(12);
   });
 });
+
+describe("recent loads with a newly entered load", () => {
+  it("lists it by its paperwork date like any other load", async () => {
+    const { NEW_LOAD_STATUS } = await import("@/lib/loads/status");
+    const { rows } = operationsRows(
+      [load({ id: "a", delivery_date: "2026-09-20" }), load({ id: "new", status: NEW_LOAD_STATUS, delivery_date: "2026-09-29" })],
+      new Map(),
+    );
+    expect(rows[0].load.id).toBe("new");
+  });
+});

@@ -59,3 +59,17 @@ describe("computeDashboardKpis — paperwork numbers only", () => {
     expect(k.revenuePerMile).toBeNull();
   });
 });
+
+describe("a newly entered load (NEW_LOAD_STATUS) on the dashboard", () => {
+  it("is counted in loads, revenue and miles exactly like any other load", async () => {
+    const { NEW_LOAD_STATUS } = await import("@/lib/loads/status");
+    const fresh = load({ id: "new", status: NEW_LOAD_STATUS, delivery_date: "2026-09-29", total_revenue: 1500, total_miles: 500 });
+    const older = load({ id: "old", status: "pending", delivery_date: "2026-09-28", total_revenue: 1000, total_miles: 400 });
+    const k = computeDashboardKpis({ periodLoads: [fresh, older], periodExpenses: [{ amount: 250 }] });
+    expect(k.loadCount).toBe(2);
+    expect(k.grossRevenue.toFixed2()).toBe("2500.00");
+    expect(k.totalMiles).toBe(900);
+    expect(k.cancelledCount).toBe(0);
+    expect(k.expenses.toFixed2()).toBe("250.00");
+  });
+});

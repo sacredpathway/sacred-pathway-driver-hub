@@ -74,3 +74,12 @@ describe("Missing paperwork info", () => {
     expect([...ids].sort()).toEqual(["a", "b"]);
   });
 });
+
+describe("missing paperwork on a newly entered load", () => {
+  it("is still checked (status never exempts a load)", async () => {
+    const { NEW_LOAD_STATUS } = await import("@/lib/loads/status");
+    const l = complete({ id: "n", status: NEW_LOAD_STATUS, total_miles: null });
+    const r = attentionItems({ ...base, loadIdsWithRateConfirmation: withRc(["n"]), loads: [l] });
+    expect(rules(r, "n")).toEqual(["no_miles"]);
+  });
+});
