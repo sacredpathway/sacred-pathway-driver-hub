@@ -13,6 +13,7 @@
 import { useActionState } from "react";
 import type { Load, Truck, Trailer } from "@/lib/supabase/types";
 import type { LoadActionState } from "../../actions";
+import { statusOptionsFor } from "@/lib/loads/status";
 
 type ServerAction = (
   prev: LoadActionState | undefined,
@@ -22,16 +23,10 @@ type ServerAction = (
 type TruckOption = Pick<Truck, "id" | "unit_number" | "status" | "make" | "model">;
 type TrailerOption = Pick<Trailer, "id" | "unit_number" | "status" | "trailer_type" | "make" | "model">;
 
-const LOAD_STATUS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "",                     label: "— Not set —" },
-  { value: "unassigned",           label: "Unassigned" },
-  { value: "assigned",             label: "Assigned" },
-  { value: "in_transit",           label: "In transit" },
-  { value: "delivered",            label: "Delivered" },
-  { value: "ready_for_settlement", label: "Ready for settlement" },
-  { value: "settled",              label: "Settled" },
-  { value: "cancelled",            label: "Cancelled" },
-];
+// Status choices come from lib/loads/status.ts: writable statuses only, plus
+// this load's current stored value when it isn't writable (e.g. a legacy
+// `cancelled` or `pending`), so saving without touching it keeps it.
+// COMPATIBILITY GATE (Phase 0.5): `cancelled` can't be newly selected.
 
 export default function LoadEditForm({
   load,
@@ -66,7 +61,7 @@ export default function LoadEditForm({
             label="Status"
             name="status"
             defaultValue={load.status ?? ""}
-            options={LOAD_STATUS_OPTIONS}
+            options={statusOptionsFor(load.status, { includeEmpty: true })}
           />
           <Field label="Broker name" name="broker_name" defaultValue={load.broker_name ?? ""} />
           <Field label="Broker MC #" name="broker_mc_number" defaultValue={load.broker_mc_number ?? ""} />

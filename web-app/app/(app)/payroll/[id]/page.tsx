@@ -21,6 +21,7 @@ import ConfirmButton from "./ConfirmButton";
 import EditHeaderForm from "./EditHeaderForm";
 import GustoLinkButton from "@/components/GustoLinkButton";
 import { formatDate, formatCurrency } from "@/lib/format";
+import { isCancelledStatus } from "@/lib/loads/status";
 import type {
   Paystub,
   PaystubEarning,
@@ -119,6 +120,8 @@ export default async function PaystubDetailPage({
         );
       })
       .filter((l) => l.status !== "settled")
+      // Cancelled loads are never payable (Phase 0.5 compatibility gate).
+      .filter((l) => !isCancelledStatus(l.status))
       .map((l) => ({
         id: l.id,
         load_number: l.load_number,

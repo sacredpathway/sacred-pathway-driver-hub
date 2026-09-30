@@ -2,21 +2,20 @@
 //  Loads constants — Carrier HQ
 // -----------------------------------------------------------------------------
 //  Non-server module. The server action file (actions.ts) and the client
-//  NewLoadForm both import the same source of truth here so the dropdown
-//  options and server validation can never drift.
+//  forms both import the same source of truth so the dropdown options and
+//  server validation can never drift. The vocabulary itself lives in
+//  lib/loads/status.ts (shared with display code).
 // =============================================================================
 
-export const LOAD_STATUSES = [
-  "unassigned",
-  "assigned",
-  "in_transit",
-  "delivered",
-  "ready_for_settlement",
-  "settled",
-  "cancelled",
-] as const;
+import { WRITABLE_LOAD_STATUSES, type WritableLoadStatus } from "@/lib/loads/status";
 
-export type LoadStatus = (typeof LOAD_STATUSES)[number];
+/**
+ * Statuses the web may newly write. `cancelled` is intentionally excluded —
+ * see the COMPATIBILITY GATE note on WRITABLE_LOAD_STATUSES.
+ */
+export const LOAD_STATUSES = WRITABLE_LOAD_STATUSES;
+
+export type LoadStatus = WritableLoadStatus;
 
 // Alias kept so NewLoadForm's existing import (and any future ones) reads
 // naturally without referencing the more-generic LOAD_STATUSES name.

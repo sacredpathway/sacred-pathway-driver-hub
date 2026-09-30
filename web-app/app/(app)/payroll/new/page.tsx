@@ -15,6 +15,7 @@ import EmptyState from "@/components/EmptyState";
 import NewPaystubForm from "./NewPaystubForm";
 import { createPaystubAction } from "../actions";
 import type { Driver, Load } from "@/lib/supabase/types";
+import { isCancelledStatus } from "@/lib/loads/status";
 
 export const runtime = "edge";
 
@@ -40,12 +41,14 @@ export default async function NewPaystubPage() {
   ]);
 
   const drivers = (driversRaw ?? []) as Driver[];
-  const loads = (loadsRaw ?? []) as unknown as Pick<
+  const loads = ((loadsRaw ?? []) as unknown as Pick<
     Load,
     "id" | "load_number" | "broker_name" | "origin" | "destination" |
     "pickup_date" | "delivery_date" | "total_miles" | "total_revenue" |
     "status" | "driver_id"
-  >[];
+  >[])
+    // Cancelled loads are never payable (Phase 0.5 compatibility gate).
+    .filter((l) => !isCancelledStatus(l.status));
 
   return (
     <section className="space-y-4">

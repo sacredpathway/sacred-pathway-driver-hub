@@ -11,6 +11,7 @@ import { useActionState } from "react";
 import type { Driver, Truck, Trailer } from "@/lib/supabase/types";
 import { createLoadAction, type LoadActionState } from "../actions";
 import { LOAD_STATUS_OPTIONS } from "../constants";
+import { loadStatusLabel } from "@/lib/loads/status";
 
 export default function NewLoadForm({
   drivers,
@@ -45,7 +46,7 @@ export default function NewLoadForm({
               className="w-full rounded-lg bg-sp-cardLight px-3 py-2 text-sm text-sp-textPrimary outline-none ring-1 ring-white/5 focus:ring-sp-gold"
             >
               {LOAD_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{labelize(s)}</option>
+                <option key={s} value={s}>{loadStatusLabel(s)}</option>
               ))}
             </select>
           </Field>

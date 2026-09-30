@@ -26,6 +26,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity/log";
+import { isCancelledStatus } from "@/lib/loads/status";
 import {
   calculatePaystub,
   seedContractorLines,
@@ -172,9 +173,13 @@ export async function createPaystubAction(
   if (workerType === "1099" && loadIds.length > 0) {
     const { data: loads, error: lErr } = await supabase
       .from("loads")
-      .select("id, load_number, origin, destination, total_revenue, total_miles")
+      .select("id, load_number, origin, destination, total_revenue, total_miles, status")
       .in("id", loadIds);
     if (lErr) return { ok: false, error: lErr.message };
+    // COMPATIBILITY GATE (Phase 0.5): cancelled loads are never payable.
+    if ((loads ?? []).some((l) => isCancelledStatus((l as { status?: string | null }).status))) {
+      return { ok: false, error: "Cancelled loads can't be added to a paystub." };
+    }
     const seed = seedContractorLines(
       (loads ?? []) as Parameters<typeof seedContractorLines>[0]
     );
@@ -592,12 +597,16 @@ export async function addLoadToDraftAction(
     // Load ownership + payload
     const { data: load, error: lErr } = await supabase
       .from("loads")
-      .select("id, load_number, origin, destination, total_revenue, total_miles")
+      .select("id, load_number, origin, destination, total_revenue, total_miles, status")
       .eq("id", loadId)
       .maybeSingle();
     if (lErr) return { ok: false, error: lErr.message };
     if (!load) {
       return { ok: false, error: "Load not found or not in your account.", field: "load_id" };
+    }
+    // COMPATIBILITY GATE (Phase 0.5): cancelled loads are never payable.
+    if (isCancelledStatus((load as { status?: string | null }).status)) {
+      return { ok: false, error: "Cancelled loads can't be added to a paystub.", field: "load_id" };
     }
 
     // Already on this paystub?

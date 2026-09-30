@@ -22,6 +22,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/log";
 import { LOAD_STATUSES } from "./constants";
+import { isAllowedStatusWrite, isKnownLoadStatus, isWritableLoadStatus, loadStatusLabel } from "@/lib/loads/status";
 
 class FieldError extends Error {
   constructor(public readonly field: string, message: string) {
@@ -211,7 +212,11 @@ export async function updateLoadAction(
 
   try {
     const statusRaw = s(formData, "status");
-    if (statusRaw && !(LOAD_STATUSES as ReadonlyArray<string>).includes(statusRaw)) {
+    // Writable statuses pass here. A known-but-not-writable value (legacy
+    // `pending`, `cancelled`, …) is only accepted if it is the load's CURRENT
+    // status — checked after the row is fetched below. COMPATIBILITY GATE
+    // (Phase 0.5): nothing can newly become `cancelled` from the web.
+    if (statusRaw && !isWritableLoadStatus(statusRaw) && !isKnownLoadStatus(statusRaw)) {
       throw new FieldError(
         "status",
         `Status must be one of: ${LOAD_STATUSES.join(", ")}.`
@@ -259,11 +264,22 @@ export async function updateLoadAction(
   // ---- Verify the load belongs to the user (RLS-backed) ----------------
   const { data: loadRow, error: loadErr } = await supabase
     .from("loads")
-    .select("id")
+    .select("id, status")
     .eq("id", loadId)
     .maybeSingle();
   if (loadErr) return { ok: false, error: loadErr.message };
   if (!loadRow) return { ok: false, error: "Load not found." };
+
+  // ---- Status write gate (lib/loads/status.ts) -------------------------
+  // COMPATIBILITY GATE (Phase 0.5): a non-writable status (e.g. cancelled)
+  // is accepted only if it is already the load's stored status.
+  if (!isAllowedStatusWrite(payload.status, (loadRow as { status?: string | null }).status)) {
+    return {
+      ok: false,
+      error: `${loadStatusLabel(payload.status)} can't be selected from the web right now.`,
+      field: "status",
+    };
+  }
 
   // ---- Re-verify truck / trailer ownership when assigning -------------
   if (truckId) {
