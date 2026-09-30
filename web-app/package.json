@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/check-required-env.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "prepages:build": "node scripts/check-required-env.mjs",
     "pages:build": "npx @cloudflare/next-on-pages",
     "pages:dev": "wrangler pages dev --proxy 3000 -- npm run dev",
     "pages:deploy": "wrangler pages deploy .vercel/output/static --project-name=driver-hub-web"
