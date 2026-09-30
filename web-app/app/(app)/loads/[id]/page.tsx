@@ -23,7 +23,7 @@ export default async function LoadDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ updated?: string }>;
+  searchParams: Promise<{ updated?: string; broker_contact?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -103,6 +103,13 @@ export default async function LoadDetailPage({
           </Link>
         </div>
       </header>
+
+      {sp.broker_contact === "failed" && (
+        <div className="rounded-md border border-sp-warning/40 bg-sp-warning/10 px-3 py-2 text-sm text-sp-warning">
+          Load saved, but the broker rep details could not be saved to your broker contacts.
+          Add them from Broker Contacts.
+        </div>
+      )}
 
       {sp.updated && (
         <div className="rounded-md border border-sp-success/40 bg-sp-success/10 px-3 py-2 text-sm text-sp-success">

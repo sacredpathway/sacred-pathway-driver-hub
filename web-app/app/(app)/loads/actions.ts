@@ -23,58 +23,13 @@ import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/log";
 import { LOAD_STATUSES } from "./constants";
 import { isAllowedStatusWrite, isKnownLoadStatus, isWritableLoadStatus, loadStatusLabel } from "@/lib/loads/status";
+import { FieldError, UUID_RE, date, maybeUuid, num, s } from "@/lib/loads/formFields";
+import { assertLoadColumns } from "@/lib/loads/schema";
+import { buildCreateLoadPayload, type CreateLoadPayload } from "@/lib/loads/payloads";
+import { saveBrokerContact, type BrokerContactInput } from "@/lib/brokers/contact";
 
-class FieldError extends Error {
-  constructor(public readonly field: string, message: string) {
-    super(`${field}: ${message}`);
-  }
-}
-
-function s(formData: FormData, name: string): string | null {
-  const raw = formData.get(name);
-  if (typeof raw !== "string") return null;
-  const t = raw.trim();
-  return t === "" ? null : t;
-}
-
-function num(
-  formData: FormData,
-  name: string,
-  opts?: { nonNegative?: boolean; label?: string }
-): number | null {
-  const raw = s(formData, name);
-  if (raw === null) return null;
-  const cleaned = raw.replace(/[$,%\s]/g, "");
-  const n = Number(cleaned);
-  if (!Number.isFinite(n)) {
-    throw new FieldError(name, `${opts?.label ?? name} must be a number.`);
-  }
-  if (opts?.nonNegative && n < 0) {
-    throw new FieldError(name, `${opts?.label ?? name} cannot be negative.`);
-  }
-  return n;
-}
-
-function date(formData: FormData, name: string): string | null {
-  const raw = s(formData, name);
-  if (!raw) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    throw new FieldError(name, "Date must be YYYY-MM-DD.");
-  }
-  return raw;
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function maybeUuid(formData: FormData, name: string, label: string): string | null {
-  const raw = s(formData, name);
-  if (raw === null) return null;
-  if (!UUID_RE.test(raw)) {
-    throw new FieldError(name, `${label} is invalid.`);
-  }
-  return raw.toLowerCase();
-}
-
+// Form parsing helpers live in lib/loads/formFields.ts so payload builders are
+// testable outside this "use server" module.
 export type LoadActionState =
   | { ok: true }
   | { ok: false; error: string; field?: string };
@@ -156,7 +111,7 @@ export async function updateLoadAssignmentAction(
   // ---- Persist ---------------------------------------------------------
   const { error } = await supabase
     .from("loads")
-    .update({ truck_id: truckId, trailer_id: trailerId })
+    .update(assertLoadColumns({ truck_id: truckId, trailer_id: trailerId }, "updateLoadAssignmentAction"))
     .eq("id", loadId)
     .eq("profile_id", user.id);
   if (error) return { ok: false, error: error.message };
@@ -296,7 +251,7 @@ export async function updateLoadAction(
   // ---- Persist ---------------------------------------------------------
   const { error } = await supabase
     .from("loads")
-    .update(payload)
+    .update(assertLoadColumns(payload, "updateLoadAction"))
     .eq("id", loadId)
     .eq("profile_id", user.id);
   if (error) return { ok: false, error: error.message };
@@ -431,78 +386,19 @@ export async function createLoadAction(
   _prev: LoadActionState | undefined,
   formData: FormData
 ): Promise<LoadActionState> {
-  let payload: {
-    load_number: string | null;
-    broker_name: string | null;
-    broker_mc_number: string | null;
-    broker_contact_name: string | null;
-    broker_contact_phone: string | null;
-    broker_phone_extension: string | null;
-    broker_contact_email: string | null;
-    origin: string | null;
-    destination: string | null;
-    pickup_date: string | null;
-    delivery_date: string | null;
-    total_miles: number | null;
-    line_haul_rate: number | null;
-    fuel_surcharge: number | null;
-    accessorial_charges: number | null;
-    total_revenue: number | null;
-    status: string;
-    driver_id: string | null;
-    truck_id: string | null;
-    trailer_id: string | null;
-  };
-
+  let payload: CreateLoadPayload;
+  let brokerContact: BrokerContactInput;
   let driverId:  string | null;
   let truckId:   string | null;
   let trailerId: string | null;
 
   try {
-    const statusRaw = s(formData, "status") ?? "unassigned";
-    if (!(LOAD_STATUSES as ReadonlyArray<string>).includes(statusRaw)) {
-      throw new FieldError(
-        "status",
-        `Status must be one of: ${LOAD_STATUSES.join(", ")}.`
-      );
-    }
-
-    driverId  = maybeUuid(formData, "driver_id",  "Driver");
-    truckId   = maybeUuid(formData, "truck_id",   "Truck");
-    trailerId = maybeUuid(formData, "trailer_id", "Trailer");
-
-    payload = {
-      load_number:            s(formData, "load_number"),
-      broker_name:            s(formData, "broker_name"),
-      broker_mc_number:       s(formData, "broker_mc_number"),
-      broker_contact_name:    s(formData, "broker_contact_name"),
-      broker_contact_phone:   s(formData, "broker_contact_phone"),
-      broker_phone_extension: s(formData, "broker_phone_extension"),
-      broker_contact_email:   s(formData, "broker_contact_email"),
-      origin:                 s(formData, "origin"),
-      destination:            s(formData, "destination"),
-      pickup_date:            date(formData, "pickup_date"),
-      delivery_date:          date(formData, "delivery_date"),
-      total_miles:            num(formData, "total_miles",        { nonNegative: true, label: "Miles" }),
-      line_haul_rate:         num(formData, "line_haul_rate",     { nonNegative: true, label: "Line haul" }),
-      fuel_surcharge:         num(formData, "fuel_surcharge",     { nonNegative: true, label: "Fuel surcharge" }),
-      accessorial_charges:    num(formData, "accessorial_charges",{ nonNegative: true, label: "Accessorials" }),
-      total_revenue:          num(formData, "total_revenue",      { nonNegative: true, label: "Total revenue" }),
-      status:                 statusRaw,
-      driver_id:              driverId,
-      truck_id:               truckId,
-      trailer_id:             trailerId,
-    };
-
-    // Auto-compute total_revenue if the carrier filled the components but
-    // left total blank. Mirrors iOS scan behavior.
-    if (payload.total_revenue === null) {
-      const parts =
-        (payload.line_haul_rate     ?? 0) +
-        (payload.fuel_surcharge     ?? 0) +
-        (payload.accessorial_charges ?? 0);
-      if (parts > 0) payload.total_revenue = Math.round(parts * 100) / 100;
-    }
+    // Only real `loads` columns go in `payload`; rep details go to
+    // brokers / broker_contacts (see lib/loads/payloads.ts).
+    ({ payload, brokerContact } = buildCreateLoadPayload(formData));
+    driverId  = payload.driver_id;
+    truckId   = payload.truck_id;
+    trailerId = payload.trailer_id;
   } catch (e) {
     if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
     return { ok: false, error: (e as Error).message };
@@ -554,10 +450,14 @@ export async function createLoadAction(
 
   const { data, error } = await supabase
     .from("loads")
-    .insert({ ...payload, profile_id: user.id })
+    .insert(assertLoadColumns({ ...payload, profile_id: user.id }, "createLoadAction"))
     .select("id")
     .single();
   if (error) return { ok: false, error: error.message };
+
+  // Broker rep → brokers / broker_contacts (the production model). The load
+  // is already saved; a failure here is reported, never hidden, never fatal.
+  const brokerResult = await saveBrokerContact(supabase, user.id, brokerContact);
 
   await logActivity(supabase, user.id, {
     entityType: "load",
@@ -571,5 +471,8 @@ export async function createLoadAction(
 
   revalidatePath("/loads");
   revalidatePath("/dashboard");
-  redirect(`/loads/${data.id}?created=1`);
+  redirect(
+    `/loads/${data.id}?created=1` +
+      (brokerResult.status === "failed" ? "&broker_contact=failed" : "")
+  );
 }
