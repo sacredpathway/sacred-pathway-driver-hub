@@ -84,3 +84,52 @@ export function buildCreateLoadPayload(formData: FormData): BuiltCreateLoad {
     },
   };
 }
+
+// =============================================================================
+//  Edit Load payload (owner decision 2026-09-30)
+// -----------------------------------------------------------------------------
+//  Edit Load has no status control and this payload has NO `status` key, so an
+//  UPDATE never touches loads.status: whatever the load already had —
+//  pending, unassigned, assigned, ready_for_settlement, settled, cancelled,
+//  or an unrecognised legacy value — is preserved exactly. Editing paperwork
+//  therefore can never make a settled/cancelled load payable again, and can
+//  never silently make an old `pending` load payable.
+//  (New Load is different: it always saves NEW_LOAD_STATUS.)
+// =============================================================================
+
+export type UpdateLoadPayload = {
+  load_number: string | null;
+  broker_name: string | null;
+  broker_mc_number: string | null;
+  origin: string | null;
+  destination: string | null;
+  pickup_date: string | null;
+  delivery_date: string | null;
+  total_miles: number | null;
+  line_haul_rate: number | null;
+  fuel_surcharge: number | null;
+  accessorial_charges: number | null;
+  total_revenue: number | null;
+  truck_id: string | null;
+  trailer_id: string | null;
+};
+
+/** Throws FieldError on invalid input (same messages as before). Any submitted `status` is ignored. */
+export function buildUpdateLoadPayload(formData: FormData): UpdateLoadPayload {
+  return {
+    load_number:         s(formData, "load_number"),
+    broker_name:         s(formData, "broker_name"),
+    broker_mc_number:    s(formData, "broker_mc_number"),
+    origin:              s(formData, "origin"),
+    destination:         s(formData, "destination"),
+    pickup_date:         date(formData, "pickup_date"),
+    delivery_date:       date(formData, "delivery_date"),
+    total_miles:         num(formData, "total_miles",         { nonNegative: true, label: "Miles" }),
+    line_haul_rate:      num(formData, "line_haul_rate",      { nonNegative: true, label: "Line haul" }),
+    fuel_surcharge:      num(formData, "fuel_surcharge",      { nonNegative: true, label: "Fuel surcharge" }),
+    accessorial_charges: num(formData, "accessorial_charges", { nonNegative: true, label: "Accessorials" }),
+    total_revenue:       num(formData, "total_revenue",       { nonNegative: true, label: "Total revenue" }),
+    truck_id:            maybeUuid(formData, "truck_id",   "Truck"),
+    trailer_id:          maybeUuid(formData, "trailer_id", "Trailer"),
+  };
+}

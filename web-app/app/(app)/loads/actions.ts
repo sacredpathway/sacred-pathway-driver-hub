@@ -21,11 +21,14 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/log";
-import { LOAD_STATUSES } from "./constants";
-import { isAllowedStatusWrite, isKnownLoadStatus, isWritableLoadStatus, loadStatusLabel } from "@/lib/loads/status";
-import { FieldError, UUID_RE, date, maybeUuid, num, s } from "@/lib/loads/formFields";
+import { FieldError, UUID_RE, maybeUuid } from "@/lib/loads/formFields";
 import { assertLoadColumns } from "@/lib/loads/schema";
-import { buildCreateLoadPayload, type CreateLoadPayload } from "@/lib/loads/payloads";
+import {
+  buildCreateLoadPayload,
+  buildUpdateLoadPayload,
+  type CreateLoadPayload,
+  type UpdateLoadPayload,
+} from "@/lib/loads/payloads";
 import { saveBrokerContact, type BrokerContactInput } from "@/lib/brokers/contact";
 
 // Form parsing helpers live in lib/loads/formFields.ts so payload builders are
@@ -129,8 +132,8 @@ export async function updateLoadAssignmentAction(
 }
 
 // =============================================================================
-//  Update FULL load — broker / route / dates / miles / revenue / status /
-//  notes / truck / trailer. Preserves the same ownership re-checks the
+//  Update FULL load — broker / route / dates / miles / revenue / truck /
+//  trailer. Status is never written here (see buildUpdateLoadPayload). Preserves the same ownership re-checks the
 //  assignment-only action uses, and explicitly allows unassign (truck_id /
 //  trailer_id → NULL).
 // =============================================================================
@@ -144,59 +147,17 @@ export async function updateLoadAction(
     return { ok: false, error: "Missing or invalid load id." };
   }
 
-  let payload: {
-    load_number: string | null;
-    broker_name: string | null;
-    broker_mc_number: string | null;
-    origin: string | null;
-    destination: string | null;
-    pickup_date: string | null;
-    delivery_date: string | null;
-    total_miles: number | null;
-    line_haul_rate: number | null;
-    fuel_surcharge: number | null;
-    accessorial_charges: number | null;
-    total_revenue: number | null;
-    status: string | null;
-    truck_id: string | null;
-    trailer_id: string | null;
-  };
-
+  // No status on edit (owner decision 2026-09-30): buildUpdateLoadPayload has
+  // no `status` key, so the UPDATE never touches loads.status and the load's
+  // existing status — including settled / cancelled — is preserved exactly.
+  let payload: UpdateLoadPayload;
   let truckId: string | null;
   let trailerId: string | null;
 
   try {
-    const statusRaw = s(formData, "status");
-    // Writable statuses pass here. A known-but-not-writable value (legacy
-    // `pending`, `cancelled`, …) is only accepted if it is the load's CURRENT
-    // status — checked after the row is fetched below. COMPATIBILITY GATE
-    // (Phase 0.5): nothing can newly become `cancelled` from the web.
-    if (statusRaw && !isWritableLoadStatus(statusRaw) && !isKnownLoadStatus(statusRaw)) {
-      throw new FieldError(
-        "status",
-        `Status must be one of: ${LOAD_STATUSES.join(", ")}.`
-      );
-    }
-    truckId = maybeUuid(formData, "truck_id", "Truck");
-    trailerId = maybeUuid(formData, "trailer_id", "Trailer");
-
-    payload = {
-      load_number:        s(formData, "load_number"),
-      broker_name:        s(formData, "broker_name"),
-      broker_mc_number:   s(formData, "broker_mc_number"),
-      origin:             s(formData, "origin"),
-      destination:        s(formData, "destination"),
-      pickup_date:        date(formData, "pickup_date"),
-      delivery_date:      date(formData, "delivery_date"),
-      total_miles:        num(formData, "total_miles", { nonNegative: true, label: "Miles" }),
-      line_haul_rate:     num(formData, "line_haul_rate", { nonNegative: true, label: "Line haul" }),
-      fuel_surcharge:     num(formData, "fuel_surcharge", { nonNegative: true, label: "Fuel surcharge" }),
-      accessorial_charges: num(formData, "accessorial_charges", { nonNegative: true, label: "Accessorials" }),
-      total_revenue:      num(formData, "total_revenue", { nonNegative: true, label: "Total revenue" }),
-      status:             statusRaw,
-      truck_id:           truckId,
-      trailer_id:         trailerId,
-    };
+    payload = buildUpdateLoadPayload(formData);
+    truckId = payload.truck_id;
+    trailerId = payload.trailer_id;
   } catch (e) {
     if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
     return { ok: false, error: (e as Error).message };
@@ -219,22 +180,11 @@ export async function updateLoadAction(
   // ---- Verify the load belongs to the user (RLS-backed) ----------------
   const { data: loadRow, error: loadErr } = await supabase
     .from("loads")
-    .select("id, status")
+    .select("id")
     .eq("id", loadId)
     .maybeSingle();
   if (loadErr) return { ok: false, error: loadErr.message };
   if (!loadRow) return { ok: false, error: "Load not found." };
-
-  // ---- Status write gate (lib/loads/status.ts) -------------------------
-  // COMPATIBILITY GATE (Phase 0.5): a non-writable status (e.g. cancelled)
-  // is accepted only if it is already the load's stored status.
-  if (!isAllowedStatusWrite(payload.status, (loadRow as { status?: string | null }).status)) {
-    return {
-      ok: false,
-      error: `${loadStatusLabel(payload.status)} can't be selected from the web right now.`,
-      field: "status",
-    };
-  }
 
   // ---- Re-verify truck / trailer ownership when assigning -------------
   if (truckId) {
@@ -263,7 +213,6 @@ export async function updateLoadAction(
     metadata: {
       label: `Load ${payload.load_number ? `#${payload.load_number}` : loadId.slice(0, 8)} updated${payload.broker_name ? ` (${payload.broker_name})` : ""}`,
       amount: payload.total_revenue,
-      status: payload.status,
     },
   });
 
