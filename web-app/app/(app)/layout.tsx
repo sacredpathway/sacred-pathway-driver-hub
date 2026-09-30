@@ -1,6 +1,7 @@
 // Authenticated app shell. Every page in the (app) route group inherits
-// this layout — nav at top, max-w container, signed-in guard handled by
-// middleware so we can render with confidence here.
+// this layout — Phase A: persistent sidebar (desktop) / drawer (mobile) via
+// components/shell/AppShell. Signed-in guard handled by middleware so we can
+// render with confidence here.
 //
 // Phase: Carrier-Sponsored Driver Access
 //   • Uses the centralized resolveAccess() to know if the user is a
@@ -11,7 +12,7 @@
 //     admin pages like /team or /drivers (the roster CRUD).
 
 import { createClient } from "@/lib/supabase/server";
-import Nav from "@/components/Nav";
+import AppShell from "@/components/shell/AppShell";
 import { resolveAccess } from "@/lib/entitlement/resolver";
 import { profileToBranding, signLogoUrl } from "@/lib/branding/profile";
 
@@ -42,31 +43,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     logoUrl = await signLogoUrl(supabase, branding.logoPath);
   }
 
-  return (
-    <div className="flex min-h-dvh flex-col bg-sp-background text-sp-textPrimary print:bg-white print:text-black">
-      {entitlement.isSponsored && (
-        <div className="border-b border-sp-success/30 bg-sp-success/10 px-4 py-1.5 text-center text-[11px] text-sp-success print:hidden">
-          Driver Hub Basic Driver access is provided by{" "}
-          <span className="font-semibold">
-            {entitlement.carrierCompanyName ?? "your carrier"}
-          </span>
-          .
-        </div>
-      )}
-      <div className="print:hidden">
-        <Nav
-          email={user?.email ?? null}
-          companyName={companyName}
-          logoUrl={logoUrl}
-          accessLevel={entitlement.accessLevel}
-        />
-      </div>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 print:max-w-none print:px-0 print:py-0">
-        {children}
-      </main>
-      <footer className="border-t border-white/5 px-4 py-3 text-center text-xs text-sp-textSecondary print:hidden">
-        {companyName ? `${companyName} · ` : ""}Driver Hub · Sacred Pathway · Cloud Sync dashboard
-      </footer>
+  const banner = entitlement.isSponsored ? (
+    <div className="border-b border-sp-success/30 bg-sp-success/10 px-4 py-1.5 text-center text-[11px] text-sp-success print:hidden">
+      Driver Hub Basic Driver access is provided by{" "}
+      <span className="font-semibold">
+        {entitlement.carrierCompanyName ?? "your carrier"}
+      </span>
+      .
     </div>
+  ) : null;
+
+  return (
+    <AppShell
+      email={user?.email ?? null}
+      companyName={companyName}
+      logoUrl={logoUrl}
+      accessLevel={entitlement.accessLevel}
+      banner={banner}
+    >
+      {children}
+    </AppShell>
   );
 }

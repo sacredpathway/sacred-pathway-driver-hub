@@ -34,7 +34,7 @@ export default async function PaystubSettingsPage() {
 
   return (
     <section className="space-y-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">

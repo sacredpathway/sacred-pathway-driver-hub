@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import EmptyState from "@/components/EmptyState";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import type { Load, Truck, Trailer } from "@/lib/supabase/types";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 export const runtime = "edge";
 
@@ -47,7 +48,7 @@ export default async function LoadsPage({
   if (loads.length === 0) {
     return (
       <section className="space-y-4">
-        <header className="flex items-baseline justify-between">
+        <header className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-2xl font-bold tracking-tight">Loads</h1>
           <Link
             href="/loads/new"
@@ -76,7 +77,7 @@ export default async function LoadsPage({
 
   return (
     <section className="space-y-4">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Loads</h1>
         <div className="flex items-center gap-3">
           <span className="text-xs text-sp-textSecondary">{loads.length} total</span>
@@ -92,7 +93,44 @@ export default async function LoadsPage({
       {sp.created && <FlashOK message="Load created." />}
       {sp.deleted && <FlashOK message="Load deleted." />}
 
-      <div className="overflow-x-auto rounded-xl border border-white/5">
+      {/* Phone: purpose-built cards (Phase A). Tablet/desktop: the table below. */}
+      <ul className="space-y-2 md:hidden" aria-label="Loads">
+        {loads.map((l) => {
+          const truck = l.truck_id ? truckById.get(l.truck_id) : undefined;
+          const trailer = l.trailer_id ? trailerById.get(l.trailer_id) : undefined;
+          return (
+            <li key={l.id} className="rounded-xl border border-white/[0.06] bg-sp-card/60 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link href={`/loads/${l.id}`} className="text-sm font-semibold text-sp-textPrimary hover:text-sp-gold">
+                    {l.load_number ?? "—"}
+                  </Link>
+                  <p className="truncate text-xs text-sp-textSecondary">{l.broker_name ?? "—"}</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-sp-gold">{formatCurrency(l.total_revenue)}</span>
+              </div>
+              <p className="mt-1.5 text-sm text-sp-textPrimary">
+                {[l.origin, l.destination].filter(Boolean).join(" → ") || "—"}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-sp-textSecondary">
+                <StatusBadge status={l.status} />
+                <span>PU {formatDate(l.pickup_date)}</span>
+                <span>{formatNumber(l.total_miles)} mi</span>
+                {truck && <span>Truck #{truck.unit_number}</span>}
+                {trailer && <span>Trailer #{trailer.unit_number}</span>}
+                <Link
+                  href={`/loads/${l.id}/edit`}
+                  className="ml-auto inline-flex h-8 items-center rounded-md border border-white/10 px-3 text-xs font-medium text-sp-textPrimary hover:bg-white/5"
+                >
+                  Edit
+                </Link>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-white/5 md:block">
         <table className="min-w-full divide-y divide-white/5 text-sm">
           <thead className="bg-sp-card text-left text-xs uppercase tracking-wide text-sp-textSecondary">
             <tr>
@@ -100,6 +138,7 @@ export default async function LoadsPage({
               <th className="px-3 py-3">Broker</th>
               <th className="hidden px-3 py-3 md:table-cell">Route</th>
               <th className="hidden px-3 py-3 md:table-cell">Pickup</th>
+              <th className="px-3 py-3">Status</th>
               <th className="px-3 py-3">Truck</th>
               <th className="px-3 py-3">Trailer</th>
               <th className="px-3 py-3 text-right">Miles</th>
@@ -126,6 +165,9 @@ export default async function LoadsPage({
                   </td>
                   <td className="hidden px-3 py-3 text-sp-textSecondary md:table-cell">
                     {formatDate(l.pickup_date)}
+                  </td>
+                  <td className="px-3 py-3">
+                    <StatusBadge status={l.status} />
                   </td>
                   <td className="px-3 py-3 text-sp-textSecondary">
                     {truck ? `#${truck.unit_number}` : "—"}

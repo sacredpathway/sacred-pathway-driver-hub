@@ -130,7 +130,7 @@ export default async function DocumentsPage({
 
   return (
     <section className="space-y-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
@@ -149,8 +149,10 @@ export default async function DocumentsPage({
         </div>
       )}
 
-      {/* Upload card */}
-      <UploadCard loads={loads} />
+      {/* Upload card — #upload is the target of the dashboard / top-bar "Upload" action */}
+      <div id="upload" className="scroll-mt-20">
+        <UploadCard loads={loads} />
+      </div>
 
       {/* Filter bar */}
       <FilterBar

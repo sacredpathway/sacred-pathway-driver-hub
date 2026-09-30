@@ -142,7 +142,7 @@ export default function NewPaystubForm({
 
       {isContractor && (
         <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
-          <header className="flex items-baseline justify-between">
+          <header className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-sp-textPrimary">
                 Loads in this period

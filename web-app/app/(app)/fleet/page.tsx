@@ -40,7 +40,7 @@ export default async function FleetPage({
 
   return (
     <section className="space-y-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Fleet</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
@@ -132,7 +132,7 @@ function FleetSection({
 }) {
   return (
     <section className="space-y-3">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <h2 className="text-lg font-semibold text-sp-textPrimary">{title}</h2>
           <span className="text-xs text-sp-textSecondary">

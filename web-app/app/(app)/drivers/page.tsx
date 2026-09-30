@@ -34,7 +34,7 @@ export default async function DriversPage() {
 
   return (
     <section className="space-y-4">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Drivers</h1>
         <div className="flex items-center gap-3">
           <span className="text-xs text-sp-textSecondary">

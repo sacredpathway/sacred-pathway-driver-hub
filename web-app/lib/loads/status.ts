@@ -174,3 +174,40 @@ export function statusOptionsFor(
   }
   return opts;
 }
+
+// -----------------------------------------------------------------------------
+//  Visual tone (Phase A) — the ONE mapping from stored status to badge colour.
+//  Display-only: it never changes what may be written (see
+//  WRITABLE_LOAD_STATUSES / isAllowedStatusWrite above).
+// -----------------------------------------------------------------------------
+
+export type LoadStatusTone =
+  | "neutral"   // unassigned / pending / not set
+  | "info"      // assigned / active / dispatched
+  | "progress"  // picked_up / in_transit
+  | "success"   // delivered / completed
+  | "gold"      // ready_for_settlement
+  | "settled"   // settled
+  | "danger"    // cancelled
+  | "unknown";  // a value this build doesn't know
+
+const TONES: Record<KnownLoadStatus, LoadStatusTone> = {
+  pending: "neutral",
+  unassigned: "neutral",
+  active: "info",
+  assigned: "info",
+  dispatched: "info",
+  picked_up: "progress",
+  in_transit: "progress",
+  delivered: "success",
+  completed: "success",
+  ready_for_settlement: "gold",
+  settled: "settled",
+  cancelled: "danger",
+};
+
+export function loadStatusTone(raw: string | null | undefined): LoadStatusTone {
+  const v = normalizeLoadStatus(raw);
+  if (!v) return "neutral";
+  return isKnownLoadStatus(v) ? TONES[v as KnownLoadStatus] : "unknown";
+}

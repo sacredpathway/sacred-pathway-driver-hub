@@ -21,7 +21,7 @@ export default function RangePicker({
       action={actionPath}
       className="space-y-3 rounded-xl border border-white/5 bg-sp-card p-4 print:hidden"
     >
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold text-sp-textPrimary">Range</h2>
         <span className="text-xs text-sp-textSecondary">{range.label}</span>
       </header>
