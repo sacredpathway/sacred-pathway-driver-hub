@@ -10,6 +10,8 @@
 //    • Sponsored drivers read through the SECURITY DEFINER
 //      `driver_dashboard_data` RPC (same arguments as before).
 //    • Carrier admins read tables directly under RLS.
+//    • Owner rule (2026-09-30): no pickup/drop-off tracking — every entered
+//      load counts as delivered; figures come from the paperwork only.
 //    • Period filter (default "All time"); loads attributed by
 //      lib/loads/periodDate (delivery → pickup → created); expenses by
 //      created_at — both exactly as before.
@@ -68,7 +70,6 @@ export default async function DashboardPage({
   }
 
   const range = resolveRange({ preset: sp.preset ?? "all_time", from: sp.from, to: sp.to });
-  const thisWeek = resolveRange({ preset: "this_week" });
   const today = utcYmd(new Date());
   const isAllTime = range.preset === "all_time";
   const fromInstant = `${range.from}T00:00:00.000Z`;
@@ -102,7 +103,7 @@ export default async function DashboardPage({
     } else {
       loadsError = true;
     }
-    // Operational read (active loads / attention) needs every load, not the period.
+    // Missing-paperwork check covers the last 30 days regardless of the selected period.
     if (isAllTime) {
       allLoads = periodLoads;
     } else {
@@ -153,21 +154,20 @@ export default async function DashboardPage({
 
   const driverNameById = new Map(drivers.map((d) => [d.id, d.name]));
 
-  const kpis = computeDashboardKpis({ allLoads, periodLoads, periodExpenses, thisWeek, today });
+  const kpis = computeDashboardKpis({ periodLoads, periodExpenses });
   const attention = attentionItems({
     loads: allLoads,
     today,
     includeDriverAssignment: isCarrierAdmin,
     loadIdsWithRateConfirmation: isCarrierDriver ? null : rateConIds,
   });
-  const operations = operationsRows(allLoads, driverNameById, today);
+  const operations = operationsRows(periodLoads, driverNameById);
   const settlements = recentSettlementViews(settlementRows, driverNameById);
   const activeDrivers = drivers.filter((d) => d.active !== false).length;
 
   return (
     <DashboardView
       range={range}
-      thisWeek={thisWeek}
       isCarrierAdmin={isCarrierAdmin}
       driverNeedsLink={driverNeedsLink}
       loadsError={loadsError}

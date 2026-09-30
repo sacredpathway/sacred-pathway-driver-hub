@@ -7,14 +7,14 @@
 
 import Link from "next/link";
 import {
-  AlertTriangle, CalendarCheck, CheckCircle2, CircleDollarSign, FilePlus2, Gauge, Receipt, Truck,
+  AlertTriangle, CheckCircle2, CircleDollarSign, FilePlus2, Gauge, Receipt, Route, Truck,
   Upload, UserPlus, Users, Wallet,
 } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import MetricCard from "@/components/ui/MetricCard";
 import SectionCard from "@/components/ui/SectionCard";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
-import StatusBadge, { Badge } from "@/components/ui/StatusBadge";
+import { Badge } from "@/components/ui/StatusBadge";
 import AttentionCard from "@/components/ui/AttentionCard";
 import EmptyState from "@/components/EmptyState";
 import { ButtonLink } from "@/components/ui/Button";
@@ -35,14 +35,13 @@ const ATTENTION_VISIBLE = 6;
 
 export interface DashboardViewProps {
   range: ResolvedRange;
-  thisWeek: ResolvedRange;
   isCarrierAdmin: boolean;
   driverNeedsLink: boolean;
   loadsError: boolean;
   kpis: DashboardKpis;
   activeDrivers: { active: number; total: number } | null;
   attention: AttentionSummary;
-  operations: { rows: OperationsRow[]; totalActive: number };
+  operations: { rows: OperationsRow[]; total: number };
   showDriverColumn: boolean;
   settlements: { rows: RecentSettlementView[]; error: boolean } | null;
   activity: ActivityRow[] | null;
@@ -95,23 +94,16 @@ export default function DashboardView(p: DashboardViewProps) {
 //  KPIs
 // ----------------------------------------------------------------------------
 
-function KpiRow({ kpis, range, thisWeek, activeDrivers }: DashboardViewProps) {
+function KpiRow({ kpis, range, activeDrivers }: DashboardViewProps) {
   const periodShort = range.preset === "all_time" ? "All time" : range.label.replace(/\s*\(.*\)$/, "");
   return (
     <section aria-label="Key figures">
       <div className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${activeDrivers ? "2xl:grid-cols-6" : "2xl:grid-cols-5"}`}>
         <MetricCard
-          label="Active loads"
-          value={formatNumber(kpis.activeLoads)}
-          hint="Not delivered or cancelled"
+          label="Loads"
+          value={formatNumber(kpis.loadCount)}
+          hint={periodShort}
           icon={<Truck className="h-4 w-4" />}
-        />
-        <MetricCard
-          label="Delivered this week"
-          value={formatNumber(kpis.deliveredThisWeek)}
-          hint={`${formatDate(thisWeek.from)} – ${formatDate(thisWeek.to)} · ${kpis.deliveredThisWeekRevenue.format()}`}
-          icon={<CalendarCheck className="h-4 w-4" />}
-          tone={kpis.deliveredThisWeek > 0 ? "good" : "neutral"}
         />
         <MetricCard
           label="Gross revenue"
@@ -119,10 +111,10 @@ function KpiRow({ kpis, range, thisWeek, activeDrivers }: DashboardViewProps) {
           tone="gold"
           hint={
             <>
-              {periodShort} · {formatNumber(kpis.periodLoadCount)} {kpis.periodLoadCount === 1 ? "load" : "loads"}
-              {kpis.cancelledInPeriodCount > 0 && (
+              {periodShort}
+              {kpis.cancelledCount > 0 && (
                 <span className="block text-orange-300">
-                  Includes {kpis.cancelledInPeriodRevenue.format()} on {kpis.cancelledInPeriodCount} cancelled
+                  Includes {kpis.cancelledRevenue.format()} on {kpis.cancelledCount} cancelled
                 </span>
               )}
             </>
@@ -130,16 +122,22 @@ function KpiRow({ kpis, range, thisWeek, activeDrivers }: DashboardViewProps) {
           icon={<CircleDollarSign className="h-4 w-4" />}
         />
         <MetricCard
-          label="Expenses"
-          value={kpis.expenses.format()}
-          hint={`${periodShort} · ${formatNumber(kpis.expenseCount)} logged`}
-          icon={<Receipt className="h-4 w-4" />}
+          label="Miles"
+          value={formatNumber(kpis.totalMiles)}
+          hint={`${formatNumber(kpis.loadsWithMiles)} of ${formatNumber(kpis.loadCount)} loads have miles`}
+          icon={<Route className="h-4 w-4" />}
         />
         <MetricCard
           label="Revenue / mile"
           value={kpis.revenuePerMile ? kpis.revenuePerMile.format() : "—"}
-          hint={kpis.revenuePerMile ? `${formatNumber(kpis.milesCounted)} mi on loads with miles` : "No miles recorded in period"}
+          hint={kpis.revenuePerMile ? "Loads with miles only" : "No miles recorded in period"}
           icon={<Gauge className="h-4 w-4" />}
+        />
+        <MetricCard
+          label="Expenses"
+          value={kpis.expenses.format()}
+          hint={`${periodShort} · ${formatNumber(kpis.expenseCount)} logged`}
+          icon={<Receipt className="h-4 w-4" />}
         />
         {activeDrivers && (
           <MetricCard
@@ -166,22 +164,22 @@ function AttentionSection({ attention, className }: { attention: AttentionSummar
   return (
     <SectionCard
       id="attention"
-      title="Attention required"
+      title="Missing paperwork info"
       description={
         attention.total === 0
-          ? "Checked against every open load"
-          : `${attention.total} ${attention.total === 1 ? "item" : "items"} across open loads`
+          ? `Loads from the last ${attention.windowDays} days`
+          : `${attention.total} ${attention.total === 1 ? "item" : "items"} · loads from the last ${attention.windowDays} days`
       }
       className={className}
     >
       {attention.total === 0 ? (
         <div className="flex items-center gap-3 rounded-xl border border-sp-success/20 bg-sp-success/[0.06] p-4 text-sm text-sp-textPrimary">
           <CheckCircle2 aria-hidden className="h-5 w-5 shrink-0 text-emerald-300" />
-          Nothing needs attention on your open loads.
+          Every load from the last {attention.windowDays} days has its rate, miles, driver, delivery date and rate confirmation.
         </div>
       ) : (
         <div className="space-y-4">
-          <ul className="flex flex-wrap gap-2" aria-label="Attention summary">
+          <ul className="flex flex-wrap gap-2" aria-label="Missing paperwork summary">
             {summary.map((r) => (
               <li key={r}>
                 <Badge tone="unknown">
@@ -253,14 +251,14 @@ function QuickActions({ isCarrierAdmin }: { isCarrierAdmin: boolean }) {
 }
 
 // ----------------------------------------------------------------------------
-//  Operations overview
+//  Recent loads (paperwork only — no status)
 // ----------------------------------------------------------------------------
 
 function OperationsSection({
   operations,
   showDriverColumn,
 }: {
-  operations: { rows: OperationsRow[]; totalActive: number };
+  operations: { rows: OperationsRow[]; total: number };
   showDriverColumn: boolean;
 }) {
   const columns: DataColumn<OperationsRow>[] = [
@@ -291,7 +289,7 @@ function OperationsSection({
     { key: "destination", header: "Destination", cell: ({ load }) => load.destination || "—" },
     { key: "pickup", header: "Pickup", cell: ({ load }) => formatDate(load.pickup_date) },
     { key: "delivery", header: "Delivery", cell: ({ load }) => formatDate(load.delivery_date) },
-    { key: "status", header: "Status", cell: ({ load }) => <StatusBadge status={load.status} /> },
+    { key: "miles", header: "Miles", align: "right", cell: ({ load }) => formatNumber(load.total_miles) },
     {
       key: "rate",
       header: "Rate",
@@ -303,8 +301,8 @@ function OperationsSection({
   return (
     <SectionCard
       id="operations"
-      title="Operations overview"
-      description={`${formatNumber(operations.totalActive)} active ${operations.totalActive === 1 ? "load" : "loads"} · soonest delivery first`}
+      title="Recent loads"
+      description={`${formatNumber(operations.total)} ${operations.total === 1 ? "load" : "loads"} in period · newest first`}
       actions={
         <Link href="/loads" className="inline-flex min-h-[32px] items-center rounded-lg px-2 text-xs font-semibold text-sp-gold hover:bg-white/[0.05] hover:text-sp-goldLight">
           All loads →
@@ -315,22 +313,22 @@ function OperationsSection({
         <EmptyState
           compact
           icon={<Truck className="h-5 w-5" />}
-          title="No active loads"
-          body="Loads that aren't delivered or cancelled show up here."
+          title="No loads in this period"
+          body="Loads you enter show up here with their rate, miles and dates."
         />
       ) : (
         <>
           <DataTable
-            caption="Active loads"
+            caption="Recent loads"
             columns={columns}
             rows={operations.rows}
             rowKey={(r) => r.load.id}
             tableFrom="xl"
             renderCard={(r) => <OperationsCard row={r} showDriver={showDriverColumn} />}
           />
-          {operations.totalActive > operations.rows.length && (
+          {operations.total > operations.rows.length && (
             <p className="mt-3 text-xs text-sp-textSecondary">
-              Showing {operations.rows.length} of {formatNumber(operations.totalActive)} active loads.
+              Showing {operations.rows.length} of {formatNumber(operations.total)} loads.
             </p>
           )}
         </>
@@ -356,9 +354,9 @@ function OperationsCard({ row: { load, driverName }, showDriver }: { row: Operat
         <span className="sr-only"> to </span> {load.destination || "—"}
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-sp-textSecondary">
-        <StatusBadge status={load.status} />
         <span>PU {formatDate(load.pickup_date)}</span>
         <span>DEL {formatDate(load.delivery_date)}</span>
+        <span>{formatNumber(load.total_miles)} mi</span>
         {showDriver && (driverName ? <span className="text-sp-textPrimary">{driverName}</span> : <span className="text-orange-300">Unassigned</span>)}
       </div>
     </div>
@@ -538,8 +536,7 @@ function CustomRange({ range }: { range: ResolvedRange }) {
           Apply
         </button>
         <p className="basis-full text-[11px] text-sp-textSecondary">
-          Applies to Gross revenue, Expenses and Revenue / mile. Active loads, Delivered this week, Attention and
-          Operations always reflect current state.
+          Applies to every figure and to Recent loads. Missing paperwork info always checks the last 30 days.
         </p>
       </form>
     </details>

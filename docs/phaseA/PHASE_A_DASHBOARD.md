@@ -4,32 +4,48 @@ Branch `phase-a/web-dashboard-redesign` (from `phase0.5/compat-security`). No
 migrations, no production data changes, no settlement builder, no Next.js /
 Cloudflare changes.
 
+## Owner rule (2026-09-30)
+
+The app does **not** track whether a load is picked up or dropped off. As soon as a
+load's paperwork is entered it counts as delivered, and the dashboard only calculates
+what is on the paperwork. Load status is not used for any dashboard figure (the only
+exception: cancelled loads are never flagged for missing paperwork). The Status
+column added to the Loads list earlier in Phase A was removed again; the load detail
+page is back to its pre-Phase-A display.
+
 ## KPI definitions (all from real rows; `lib/dashboard/kpis.ts`)
+
+All figures use the selected period. Loads are attributed by
+`delivery_date → pickup_date → created_at` (`lib/loads/periodDate`).
 
 | KPI | Calculation |
 |---|---|
-| Active loads | Loads that are **not cancelled** and **not delivered**. Delivered = status group completed/settled (`delivered`, `completed`, `ready_for_settlement`, `settled`) **or** `delivery_date <= today` (iOS `isCompleted` parity). Not period-filtered. |
-| Delivered this week | Delivered loads (rule above) whose period date (`delivery_date → pickup_date → created_at`, `lib/loads/periodDate`) falls Monday → today (UTC, `resolveRange("this_week")`). Hint shows Σ `total_revenue` of those loads. |
-| Gross revenue | Σ `loads.total_revenue` for loads attributed to the selected period by `lib/loads/periodDate` — identical set to the previous dashboard tile and the Revenue report. Cancelled loads remain included (unchanged behaviour); any cancelled amount is shown in the hint. |
-| Expenses | Σ `expenses.amount` for the selected period by `expenses.created_at` (unchanged rule). |
-| Revenue / mile | Σ revenue of period loads with `total_miles > 0` ÷ Σ their miles; "—" when no miles. |
+| Loads | Number of loads in the period. |
+| Gross revenue | Σ `loads.total_revenue` — identical set and sum to the previous dashboard tile and the Revenue report. Any cancelled amount is shown in the hint. |
+| Miles | Σ `loads.total_miles`; hint shows how many loads have miles. |
+| Revenue / mile | Σ revenue of loads with `total_miles > 0` ÷ Σ their miles; "—" when none. |
+| Expenses | Σ `expenses.amount` for the period by `expenses.created_at` (unchanged rule). |
 | Active drivers (admins) | `drivers.active != false` of the roster count. |
 
-Removed on purpose: **Net profit** (revenue − logged expenses ignores driver pay, so it
-overstated profit), **Pending payroll** / driver est-pay card (legacy paystub model).
-Driver pay returns in Phase D from the settlement engine.
+Removed on purpose: **Net profit** (revenue − logged expenses ignores driver pay),
+**Pending payroll** / driver est-pay card (legacy paystub model). Driver pay returns in
+Phase D from the settlement engine. Money sums use the Decimal `Money` type.
 
-Money sums use the Decimal `Money` type (exact to the cent).
+## Missing paperwork info (`lib/dashboard/attention.ts`)
 
-## Attention Required rules (`lib/dashboard/attention.ts`)
+Checks loads dated in the **last 30 days** (delivery → pickup → created), skipping
+cancelled loads. Status is never checked.
 
-Cancelled and settled loads are never flagged.
+1. **No rate entered** — `total_revenue` empty or 0.
+2. **No miles entered** — `total_miles` empty or 0.
+3. **No driver assigned** — `driver_id` empty (carrier admins only).
+4. **No delivery date** — counted by pickup date until one is set.
+5. **No rate confirmation attached** — no `documents` row of type `rate_confirmation` for the load (skipped if the documents read fails, and for sponsored drivers).
 
-1. **Delivery date passed** — status Assigned/Dispatched/Picked Up/In Transit and `delivery_date < today`.
-2. **No driver assigned** — active load, `driver_id` null (carrier admins only).
-3. **No delivery date** — active load, `delivery_date` null (it is counted by pickup date until set).
-4. **No rate entered** — `total_revenue` null or 0.
-5. **No rate confirmation attached** — delivered load with no `documents` row of type `rate_confirmation` for it (skipped entirely if the documents read fails, and for sponsored drivers who can't read carrier documents).
+## Recent loads
+
+The period's loads, newest paperwork first: load, driver, origin, destination, pickup,
+delivery, miles, rate. No status.
 
 ## Recent settlements
 

@@ -2,27 +2,24 @@ import { describe, expect, it } from "vitest";
 import { operationsRows } from "./operations";
 import { load } from "./fixtures.test-helpers";
 
-describe("operations overview rows", () => {
-  it("active loads only, soonest delivery first, undated after, real driver names", () => {
+describe("recent loads", () => {
+  it("newest paperwork first regardless of status; real driver names only", () => {
     const loads = [
-      load({ id: "late", delivery_date: "2026-10-09" }),
-      load({ id: "soon", delivery_date: "2026-10-01", driver_id: "d2" }),
-      load({ id: "nodate", delivery_date: null, pickup_date: "2026-09-29" }),
-      load({ id: "done", status: "delivered", delivery_date: "2026-09-20" }),
-      load({ id: "cx", status: "cancelled", delivery_date: "2026-10-02" }),
+      load({ id: "old", status: "in_transit", delivery_date: "2026-09-10" }),
+      load({ id: "new", status: "pending", delivery_date: "2026-09-29", driver_id: "d2" }),
+      load({ id: "mid", status: "settled", delivery_date: null, pickup_date: "2026-09-20" }),
     ];
-    const names = new Map([["d2", "Jordan"]]);
-    const { rows, totalActive } = operationsRows(loads, names, "2026-09-30");
-    expect(totalActive).toBe(3);
-    expect(rows.map((r) => r.load.id)).toEqual(["soon", "late", "nodate"]);
+    const { rows, total } = operationsRows(loads, new Map([["d2", "Jordan"]]));
+    expect(total).toBe(3);
+    expect(rows.map((r) => r.load.id)).toEqual(["new", "mid", "old"]);
     expect(rows[0].driverName).toBe("Jordan");
-    expect(rows[1].driverName).toBeNull(); // drv-1 not on roster → null, never a made-up name
+    expect(rows[1].driverName).toBeNull();
   });
 
   it("respects the limit", () => {
-    const loads = Array.from({ length: 12 }, (_, i) => load({ delivery_date: `2026-10-${String(i + 1).padStart(2, "0")}` }));
-    const { rows, totalActive } = operationsRows(loads, new Map(), "2026-09-30", 8);
+    const loads = Array.from({ length: 12 }, (_, i) => load({ delivery_date: `2026-09-${String(i + 1).padStart(2, "0")}` }));
+    const { rows, total } = operationsRows(loads, new Map(), 8);
     expect(rows).toHaveLength(8);
-    expect(totalActive).toBe(12);
+    expect(total).toBe(12);
   });
 });

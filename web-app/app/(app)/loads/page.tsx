@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import EmptyState from "@/components/EmptyState";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import type { Load, Truck, Trailer } from "@/lib/supabase/types";
-import StatusBadge from "@/components/ui/StatusBadge";
 
 export const runtime = "edge";
 
@@ -113,7 +112,6 @@ export default async function LoadsPage({
                 {[l.origin, l.destination].filter(Boolean).join(" → ") || "—"}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-sp-textSecondary">
-                <StatusBadge status={l.status} />
                 <span>PU {formatDate(l.pickup_date)}</span>
                 <span>{formatNumber(l.total_miles)} mi</span>
                 {truck && <span>Truck #{truck.unit_number}</span>}
@@ -138,7 +136,6 @@ export default async function LoadsPage({
               <th className="px-3 py-3">Broker</th>
               <th className="hidden px-3 py-3 md:table-cell">Route</th>
               <th className="hidden px-3 py-3 md:table-cell">Pickup</th>
-              <th className="px-3 py-3">Status</th>
               <th className="px-3 py-3">Truck</th>
               <th className="px-3 py-3">Trailer</th>
               <th className="px-3 py-3 text-right">Miles</th>
@@ -165,9 +162,6 @@ export default async function LoadsPage({
                   </td>
                   <td className="hidden px-3 py-3 text-sp-textSecondary md:table-cell">
                     {formatDate(l.pickup_date)}
-                  </td>
-                  <td className="px-3 py-3">
-                    <StatusBadge status={l.status} />
                   </td>
                   <td className="px-3 py-3 text-sp-textSecondary">
                     {truck ? `#${truck.unit_number}` : "—"}

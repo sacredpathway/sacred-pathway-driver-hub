@@ -6,17 +6,15 @@ import { attentionItems } from "@/lib/dashboard/attention";
 import DashboardView, { type DashboardViewProps } from "./DashboardView";
 
 function props(over: Partial<DashboardViewProps> = {}): DashboardViewProps {
-  const thisWeek = resolveRange({ preset: "this_week" });
   return {
     range: resolveRange({ preset: "all_time" }),
-    thisWeek,
     isCarrierAdmin: true,
     driverNeedsLink: false,
     loadsError: false,
-    kpis: computeDashboardKpis({ allLoads: [], periodLoads: [], periodExpenses: [], thisWeek, today: "2026-09-30" }),
+    kpis: computeDashboardKpis({ periodLoads: [], periodExpenses: [] }),
     activeDrivers: { active: 0, total: 0 },
     attention: attentionItems({ loads: [], today: "2026-09-30", includeDriverAssignment: true, loadIdsWithRateConfirmation: new Set() }),
-    operations: { rows: [], totalActive: 0 },
+    operations: { rows: [], total: 0 },
     showDriverColumn: true,
     settlements: { rows: [], error: false },
     activity: [],
@@ -38,8 +36,13 @@ describe("DashboardView with no data", () => {
     expect(dollarAmounts).toEqual([]);
   });
 
-  it("states that nothing needs attention instead of inventing alerts", () => {
-    expect(html).toContain("Nothing needs attention");
+  it("states that paperwork is complete instead of inventing alerts", () => {
+    expect(html).toContain("Missing paperwork info");
+    expect(html).toContain("has its rate, miles, driver, delivery date and rate confirmation");
+  });
+
+  it("shows no pickup/drop-off status anywhere on the dashboard", () => {
+    expect(html).not.toMatch(/Active loads|Delivered this week|In Transit|Picked Up/);
   });
 
   it("offers only working quick actions — no Create Settlement", () => {
@@ -63,5 +66,22 @@ describe("DashboardView role and error states", () => {
     const html = renderToStaticMarkup(<DashboardView {...props({ settlements: { rows: [], error: true } })} />);
     expect(html).toContain("Settlements couldn&#x27;t be loaded");
     expect(html).not.toContain("No settlements yet");
+  });
+});
+
+describe("Recent loads row", () => {
+  it("shows paperwork fields and never the load status", () => {
+    const load = {
+      id: "l1", load_number: "SP-1", driver_id: "d1", broker_name: "Acme", origin: "Tulsa, OK", destination: "Dallas, TX",
+      pickup_date: "2026-09-28", delivery_date: "2026-09-29", status: "in_transit", total_revenue: 1234.5, total_miles: 480,
+      created_at: "2026-09-28T00:00:00Z",
+    };
+    const html = renderToStaticMarkup(
+      <DashboardView {...props({ operations: { rows: [{ load, driverName: "Pat" }], total: 1 } })} />,
+    );
+    expect(html).toContain("SP-1");
+    expect(html).toContain("$1,234.50");
+    expect(html).toContain("480");
+    expect(html).not.toContain("In Transit");
   });
 });
