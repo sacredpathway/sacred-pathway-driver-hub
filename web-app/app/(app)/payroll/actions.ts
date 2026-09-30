@@ -6,14 +6,20 @@
 //  (profile_id = auth.uid()) is the second gate.
 //
 //  Lifecycle:
-//    draft   — created; lines can be added/removed/edited
-//    issued  — locked (UI hides edit controls); YTD snapshotted, paystub_number
-//              assigned, gets a check_date
-//    paid    — informational; carrier marks after sending the money
-//    voided  — reversed; rolls escrow_balance back if applicable
+//    draft   — created; lines can be added/removed/edited. Attaching a load
+//              does NOT settle it.
+//    issued  — database RPC issue_paystub(): ONE transaction that re-verifies
+//              every load, assigns paystub_number, snapshots YTD, sets issued
+//              and marks every included load `settled`
+//    paid    — issued → paid only; informational, not a settle event
+//    voided  — database RPC void_paystub(): voids issued/paid and returns
+//              loads to ready_for_settlement unless still paid elsewhere
+//
+//  Payment integrity (migration 20261001120000_paystub_payment_integrity) is
+//  enforced in the database; lib/payroll/integrity.ts maps its reason codes.
 //
 //  YTD snapshot strategy:
-//    On issue, we compute YTD totals for the driver up to (and including) this
+//    On issue, public.issue_paystub() computes YTD totals for the driver up to (and including) this
 //    paystub by summing other issued paystubs in the same calendar year plus
 //    this one's totals. Snapshots are persisted on the paystub row and on each
 //    child row's ytd_amount column so the printed paystub is FROZEN. Future
@@ -27,6 +33,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity/log";
 import { isCancelledStatus } from "@/lib/loads/status";
+import {
+  ISSUE_PAYSTUB_RPC,
+  VOID_PAYSTUB_RPC,
+  LOAD_CONFLICTS_RPC,
+  conflictMessage,
+  integrityMessage,
+  isMissingFunction,
+} from "@/lib/payroll/integrity";
 import {
   calculatePaystub,
   seedContractorLines,
@@ -180,6 +194,20 @@ export async function createPaystubAction(
     if ((loads ?? []).some((l) => isCancelledStatus((l as { status?: string | null }).status))) {
       return { ok: false, error: "Cancelled loads can't be added to a paystub." };
     }
+    // PAYMENT INTEGRITY: refuse loads already paid/finalized elsewhere before
+    // creating anything. The database trigger re-checks on insert.
+    const { data: conflicts, error: cErr } = await supabase.rpc(LOAD_CONFLICTS_RPC, {
+      p_load_ids: loadIds,
+    });
+    if (cErr) return { ok: false, error: integrityMessage(cErr) };
+    const firstConflict = ((conflicts ?? []) as Array<{ load_id: string; conflict: string }>)[0];
+    if (firstConflict) {
+      const hit = (loads ?? []).find((l) => (l as { id: string }).id === firstConflict.load_id) as
+        | { load_number?: string | null }
+        | undefined;
+      const label = hit?.load_number ? `Load #${hit.load_number}` : null;
+      return { ok: false, error: conflictMessage(firstConflict.conflict, label) };
+    }
     const seed = seedContractorLines(
       (loads ?? []) as Parameters<typeof seedContractorLines>[0]
     );
@@ -228,7 +256,11 @@ export async function createPaystubAction(
   }));
   if (earningsToInsert.length > 0) {
     const { error: eErr } = await supabase.from("paystub_earnings").insert(earningsToInsert);
-    if (eErr) return { ok: false, error: eErr.message };
+    if (eErr) {
+      // Best-effort cleanup of the empty draft header (drafts are deletable).
+      await supabase.from("paystubs").delete().eq("id", ps.id).eq("profile_id", user.id).eq("status", "draft");
+      return { ok: false, error: integrityMessage(eErr) };
+    }
   }
 
   // Recompute totals from inserted lines (cheap — we have them in memory)
@@ -569,6 +601,9 @@ export async function addSettlementItemAction(
 //    • 1099 only (W2 paystubs don't carry settlement_gross lines)
 //    • load must belong to the carrier (RLS-backed)
 //    • load must not already be attached to this same paystub
+//    • load must not be paid/finalized elsewhere (database trigger:
+//      settled, on an issued/paid paystub, or on an approved/paid iPhone
+//      settlement). Another DRAFT holding the load is allowed.
 // =============================================================================
 
 export async function addLoadToDraftAction(
@@ -643,7 +678,10 @@ export async function addLoadToDraftAction(
       rate: null,
       load_id: load.id,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      const tag = load.load_number ? `Load #${load.load_number}` : null;
+      return { ok: false, error: integrityMessage(error, tag), field: "load_id" };
+    }
   } catch (e) {
     if (e instanceof FieldError) return { ok: false, error: e.message, field: e.field };
     return { ok: false, error: (e as Error).message };
@@ -792,7 +830,7 @@ export async function removeLineAction(
 
   const { error } = await supabase.from(table).delete()
     .eq("id", lineId).eq("paystub_id", paystubId).eq("profile_id", user.id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(integrityMessage(error));
 
   await recomputeAndPersistTotals(supabase, paystubId);
   revalidatePath(`/payroll/${paystubId}`);
@@ -838,8 +876,23 @@ async function recomputeAndPersistTotals(
 }
 
 // =============================================================================
-//  Issue: lock the paystub, snapshot YTD, assign paystub_number
+//  Issue — the authoritative finalization event
+// -----------------------------------------------------------------------------
+//  Totals are refreshed with the JS engine (calculatePaystub — unchanged pay
+//  math), then public.issue_paystub() does everything else in ONE database
+//  transaction: lock the paystub + its loads, reject the whole issue if any
+//  load is cancelled / settled / on another issued-or-paid paystub / on an
+//  approved-or-paid iPhone settlement, assign PS-YYYY-NNNNN, snapshot YTD
+//  (same rules as before), set issued, and mark every load settled.
+//  There is no second issuance implementation in this file.
 // =============================================================================
+
+type IssueResult = {
+  paystub_number: string;
+  net_pay: number | null;
+  driver_id: string;
+  settled_load_ids: string[];
+};
 
 export async function issuePaystubAction(paystubId: string): Promise<void> {
   if (!paystubId) throw new Error("Missing paystub id.");
@@ -849,86 +902,48 @@ export async function issuePaystubAction(paystubId: string): Promise<void> {
   if (!user) throw new Error("Not signed in.");
 
   // Refresh totals once before issuing (in case child rows were edited
-  // directly outside the line-add actions).
+  // directly outside the line-add actions). Drafts only.
+  const { data: ps } = await supabase.from("paystubs").select("status").eq("id", paystubId).maybeSingle();
+  if (!ps) throw new Error("Paystub not found.");
+  if ((ps as { status: PaystubStatus }).status !== "draft") throw new Error("Already issued.");
   await recomputeAndPersistTotals(supabase, paystubId);
 
-  // Pull the now-current header
-  const { data: ps } = await supabase.from("paystubs").select("*").eq("id", paystubId).maybeSingle();
-  if (!ps) throw new Error("Paystub not found.");
-  const header = ps as {
-    id: string; driver_id: string; status: PaystubStatus;
-    check_date: string | null; pay_period_end: string;
-    gross_earnings: number; taxable_wages: number | null;
-    total_taxes_withheld: number; net_pay: number;
-  };
-  if (header.status !== "draft") throw new Error("Already issued.");
-
-  const checkDate = header.check_date ?? header.pay_period_end;
-  const year = new Date(checkDate).getUTCFullYear();
-  const yearStart = `${year}-01-01`;
-  const yearEnd   = `${year}-12-31`;
-
-  // YTD = sum of issued paystubs in the same year for this driver + this one
-  const { data: priorPaystubs } = await supabase
-    .from("paystubs")
-    .select("gross_earnings, taxable_wages, total_taxes_withheld, net_pay, check_date")
-    .eq("driver_id", header.driver_id)
-    .eq("status", "issued")
-    .neq("id", paystubId)
-    .gte("check_date", yearStart)
-    .lte("check_date", yearEnd);
-
-  const ytdGross = (priorPaystubs ?? []).reduce((a, r) => a + (r.gross_earnings ?? 0), 0) + header.gross_earnings;
-  const ytdTaxable = (priorPaystubs ?? []).reduce((a, r) => a + (r.taxable_wages ?? 0), 0) + (header.taxable_wages ?? 0);
-  const ytdTaxes = (priorPaystubs ?? []).reduce((a, r) => a + (r.total_taxes_withheld ?? 0), 0) + header.total_taxes_withheld;
-  const ytdNet = (priorPaystubs ?? []).reduce((a, r) => a + (r.net_pay ?? 0), 0) + header.net_pay;
-
-  // paystub_number: PS-YYYY-NNNNN (next-highest existing for this profile in year)
-  const { data: maxRow } = await supabase
-    .from("paystubs")
-    .select("paystub_number")
-    .eq("profile_id", user.id)
-    .like("paystub_number", `PS-${year}-%`)
-    .order("paystub_number", { ascending: false })
-    .limit(1);
-  let nextSeq = 1;
-  if (maxRow && maxRow[0]?.paystub_number) {
-    const tail = String(maxRow[0].paystub_number).split("-")[2];
-    const parsed = Number(tail);
-    if (Number.isFinite(parsed)) nextSeq = parsed + 1;
+  const { data, error } = await supabase.rpc(ISSUE_PAYSTUB_RPC, { p_paystub_id: paystubId });
+  if (error) {
+    let label: string | null = null;
+    if (!isMissingFunction(error) && error.details && /^[0-9a-f-]{36}$/i.test(error.details)) {
+      const { data: l } = await supabase.from("loads").select("load_number").eq("id", error.details).maybeSingle();
+      const n = (l as { load_number?: string | null } | null)?.load_number;
+      label = n ? `Load #${n}` : null;
+    }
+    throw new Error(integrityMessage(error, label));
   }
-  const paystubNumber = `PS-${year}-${String(nextSeq).padStart(5, "0")}`;
-
-  const { error } = await supabase.from("paystubs").update({
-    status: "issued",
-    paystub_number: paystubNumber,
-    check_date: checkDate,
-    ytd_gross_earnings: r2(ytdGross),
-    ytd_taxable_wages: r2(ytdTaxable),
-    ytd_taxes_withheld: r2(ytdTaxes),
-    ytd_net_pay: r2(ytdNet),
-  }).eq("id", paystubId).eq("profile_id", user.id);
-  if (error) throw new Error(error.message);
+  const result = data as IssueResult;
 
   await logActivity(supabase, user.id, {
     entityType: "paystub",
     entityId: paystubId,
     action: "issued",
     metadata: {
-      label: `Paystub ${paystubNumber} issued`,
-      amount: header.net_pay,
-      driver_id: header.driver_id,
-      paystub_number: paystubNumber,
+      label: `Paystub ${result.paystub_number} issued`,
+      amount: result.net_pay,
+      driver_id: result.driver_id,
+      paystub_number: result.paystub_number,
+      settled_load_count: result.settled_load_ids?.length ?? 0,
     },
   });
 
   revalidatePath("/payroll");
   revalidatePath(`/payroll/${paystubId}`);
+  revalidatePath("/loads");
+  revalidatePath("/dashboard");
 }
 
 // =============================================================================
-//  Void: reverse an issued paystub. Keeps the row + line items for audit but
-//        flips status. Future enhancement: roll back escrow_balance.
+//  Void — public.void_paystub(): issued/paid → voided in ONE transaction and
+//  each settled load returns to ready_for_settlement only when no other
+//  issued/paid paystub or approved/paid settlement still pays it. Line items
+//  are kept for audit. (escrow_balance roll-back remains a future item.)
 // =============================================================================
 
 export async function voidPaystubAction(paystubId: string): Promise<void> {
@@ -937,19 +952,31 @@ export async function voidPaystubAction(paystubId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in.");
 
-  const { error } = await supabase.from("paystubs").update({ status: "voided" })
-    .eq("id", paystubId).eq("profile_id", user.id);
-  if (error) throw new Error(error.message);
+  const { data, error } = await supabase.rpc(VOID_PAYSTUB_RPC, { p_paystub_id: paystubId });
+  if (error) throw new Error(integrityMessage(error));
+  const result = data as { released_load_ids?: string[]; kept_load_ids?: string[] };
 
   await logActivity(supabase, user.id, {
     entityType: "paystub",
     entityId: paystubId,
     action: "voided",
+    metadata: {
+      released_load_count: result.released_load_ids?.length ?? 0,
+      kept_settled_load_count: result.kept_load_ids?.length ?? 0,
+    },
   });
 
   revalidatePath("/payroll");
   revalidatePath(`/payroll/${paystubId}`);
+  revalidatePath("/loads");
+  revalidatePath("/dashboard");
 }
+
+// =============================================================================
+//  Mark paid — issued → paid only. Not a settle event (loads were settled at
+//  issue). Draft and voided paystubs are refused here AND by the database
+//  status trigger.
+// =============================================================================
 
 export async function markPaidAction(paystubId: string): Promise<void> {
   if (!paystubId) throw new Error("Missing paystub id.");
@@ -957,9 +984,11 @@ export async function markPaidAction(paystubId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in.");
 
-  const { error } = await supabase.from("paystubs").update({ status: "paid" })
-    .eq("id", paystubId).eq("profile_id", user.id);
-  if (error) throw new Error(error.message);
+  const { data, error } = await supabase.from("paystubs").update({ status: "paid" })
+    .eq("id", paystubId).eq("profile_id", user.id).eq("status", "issued")
+    .select("id");
+  if (error) throw new Error(integrityMessage(error));
+  if (!data || data.length === 0) throw new Error("Only issued paystubs can be marked paid.");
 
   await logActivity(supabase, user.id, {
     entityType: "paystub",
