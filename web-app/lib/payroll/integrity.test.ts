@@ -14,7 +14,7 @@ describe("integrity reason codes", () => {
     const sql = [
       "load_not_found", "load_cancelled", "load_settled", "load_on_issued_paystub", "load_on_settlement",
       "paystub_locked", "paystub_not_found", "paystub_not_draft", "paystub_not_voidable",
-      "paystub_invalid_transition", "not_authenticated",
+      "paystub_invalid_transition", "paystub_not_deletable", "not_authenticated",
     ];
     expect([...INTEGRITY_CODES].sort()).toEqual(sql.sort());
     for (const c of sql) expect(integrityCode({ message: c })).toBe(c);

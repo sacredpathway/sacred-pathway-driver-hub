@@ -1017,8 +1017,8 @@ export async function deleteDraftAction(paystubId: string): Promise<void> {
   }
 
   const { error } = await supabase.from("paystubs").delete()
-    .eq("id", paystubId).eq("profile_id", user.id);
-  if (error) throw new Error(error.message);
+    .eq("id", paystubId).eq("profile_id", user.id).eq("status", "draft");
+  if (error) throw new Error(integrityMessage(error));
 
   await logActivity(supabase, user.id, {
     entityType: "paystub",

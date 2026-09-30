@@ -125,8 +125,16 @@ create table public.settlements (
   paystub_id uuid references public.paystubs(id) on delete set null,
   engine_version text,
   is_estimate boolean default false,
-  created_at timestamptz default now()
+  settlement_number text,
+  approved_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
+-- Production: settlements_touch_updated_at → sph_touch_updated_at (SECURITY DEFINER).
+create or replace function public.sph_touch_updated_at() returns trigger
+language plpgsql security definer set search_path to 'public' as $$ begin new.updated_at = now(); return new; end $$;
+create trigger settlements_touch_updated_at before update on public.settlements
+  for each row execute function public.sph_touch_updated_at();
 
 create table public.settlement_loads (
   id uuid primary key default gen_random_uuid(),

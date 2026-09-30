@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  Local database tests for 20261001120000_paystub_payment_integrity.sql
+#  and 20261001120100_cross_platform_payment_integrity.sql
 # -----------------------------------------------------------------------------
 #  Spins up a THROWAWAY Postgres cluster in a temp dir (never touches any
 #  Supabase project), loads the production-mirroring fixture, applies the
@@ -15,7 +16,10 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
-MIGRATION="$REPO/supabase/migrations/20261001120000_paystub_payment_integrity.sql"
+MIGRATIONS=(
+  "$REPO/supabase/migrations/20261001120000_paystub_payment_integrity.sql"
+  "$REPO/supabase/migrations/20261001120100_cross_platform_payment_integrity.sql"
+)
 PGBIN="${PGBIN:-$(dirname "$(command -v postgres 2>/dev/null || echo /usr/lib/postgresql/16/bin/postgres)")}"
 PORT="${PGPORT_TEST:-54329}"
 WORK="$(mktemp -d)"
@@ -39,11 +43,19 @@ PSQL=(psql -X -v ON_ERROR_STOP=1 -q)
 
 echo "== fixture"
 "${PSQL[@]}" -f "$HERE/00_fixture.sql" >/dev/null
-echo "== migration (applied verbatim, twice to prove it is re-runnable)"
-"${PSQL[@]}" -1 -c "set client_min_messages = warning" -f "$MIGRATION" >/dev/null
-"${PSQL[@]}" -1 -c "set client_min_messages = warning" -f "$MIGRATION" >/dev/null
-echo "== functional tests"
-"${PSQL[@]}" -f "$HERE/10_tests.sql" 2>&1 | sed -n 's/^psql:[^ ]* NOTICE:  //p; s/^NOTICE:  //p; /ERROR/p'
-echo "== concurrency tests"
+echo "== migrations (applied verbatim in order, twice to prove they are re-runnable)"
+for pass in 1 2; do
+  for m in "${MIGRATIONS[@]}"; do
+    "${PSQL[@]}" -1 -c "set client_min_messages = warning" -f "$m" >/dev/null
+  done
+done
+filter() { sed -n 's/^psql:[^ ]* NOTICE:  //p; s/^NOTICE:  //p; /ERROR/p'; }
+echo "== functional tests: web paystub integrity"
+"${PSQL[@]}" -f "$HERE/10_tests.sql" 2>&1 | filter
+echo "== functional tests: cross-platform (iPhone settlements)"
+"${PSQL[@]}" -f "$HERE/30_cross_platform.sql" 2>&1 | filter
+echo "== concurrency tests: web paystubs"
 bash "$HERE/20_concurrency.sh"
+echo "== concurrency tests: web vs iPhone"
+bash "$HERE/40_cross_platform_concurrency.sh"
 echo "== done: all database tests passed"

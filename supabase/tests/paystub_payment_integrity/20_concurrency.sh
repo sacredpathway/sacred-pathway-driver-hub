@@ -106,12 +106,5 @@ LS=$(sup "select status from loads where id = '$L'")
 [[ "$R" == OK && "$S" == "voided,issued" && "$LS" == settled ]] \
   && pass "R8 issue waits for the void, then pays the released load exactly once" || fail "R8 got R=[$R] S=[$S] L=[$LS]"
 
-# ---- R9 (informational): iPhone approval racing a web issue ----------------
-# The iPhone app does not consult web paystubs; its plain UPDATE waits on the
-# row lock and then succeeds. Documented as a remaining cross-system gap.
-L=$(new_load); P=$(new_draft); attach "$P" "$L"
-( "${PSQL[@]}" -c "$AS_A begin; select public.issue_paystub('$P'); select pg_sleep(2); commit;" >/dev/null ) &
-sleep 0.5
-R=$(try "select tst.ios_settlement('$L', 'approved'); update loads set status = 'settled' where id = '$L';")
-wait
-echo "INFO R9 iPhone approval concurrent with web issue: iPhone write result=[$R] (gap: not blocked server-side)"
+# Web issue vs iPhone settlement approval races live in
+# 40_cross_platform_concurrency.sh (closed by 20261001120100).

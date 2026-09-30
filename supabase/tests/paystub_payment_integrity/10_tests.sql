@@ -161,7 +161,11 @@ select tst.new_draft(:DA) as p3i \gset
 select tst.attach(:'p3i', :'l3i') is not null as x \gset
 select public.issue_paystub(:'p3i') is not null as x \gset
 :asSuper
+-- Constructed inconsistent data: 20261001120100 now refuses to un-settle a
+-- load that an issued paystub still pays, so bypass that guard to build it.
+alter table public.loads disable trigger sph_loads_keep_paid_settled;
 update public.loads set status = 'ready_for_settlement' where id = :'l3i';
+alter table public.loads enable trigger sph_loads_keep_paid_settled;
 :asA
 select tst.err(format('select tst.attach(%L, %L)', :'p3', :'l3i'), '^load_on_issued_paystub',
                'T03f load on another issued paystub cannot be added');
@@ -284,13 +288,23 @@ select public.issue_paystub(:'p12r') is not null as x \gset
 select tst.eq(tst.status_of(:'l12a'), 'settled', 'T12b released load can be re-issued once');
 
 -- =================================================================== T13 =====
--- (a) also on an approved iPhone settlement (created after the web issue — the
---     cross-system race documented as a remaining gap)
+-- (a) also on an approved iPhone settlement. 20261001120100 now refuses to
+--     create that double payment (see 30_cross_platform.sql X02), so the
+--     double record is constructed with the settlement guards bypassed —
+--     this proves void still refuses to release it.
 select tst.new_load('ready_for_settlement') as l13 \gset
 select tst.new_draft(:DA) as p13 \gset
 select tst.attach(:'p13', :'l13') is not null as x \gset
 select public.issue_paystub(:'p13') is not null as x \gset
+:asSuper
+alter table public.settlement_loads disable trigger sph_settlement_loads_guard;
+alter table public.settlements disable trigger sph_settlements_guard_approval;
+:asA
 select tst.ios_settlement(:'l13', 'approved') is not null as x \gset
+:asSuper
+alter table public.settlement_loads enable trigger sph_settlement_loads_guard;
+alter table public.settlements enable trigger sph_settlements_guard_approval;
+:asA
 select public.void_paystub(:'p13') as r13 \gset
 select tst.eq(tst.status_of(:'l13'), 'settled', 'T13a void keeps a load still paid by an iPhone settlement');
 select tst.eq(jsonb_array_length(:'r13'::jsonb -> 'kept_load_ids')::text, '1', 'T13a RPC reports kept ids');

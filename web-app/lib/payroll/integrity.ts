@@ -8,6 +8,10 @@
 //    • triggers                     block paying a load already paid elsewhere,
 //                                   editing load lines off-draft, and invalid
 //                                   status transitions
+//    • 20261001120100: iPhone settlement approval is refused for a load a
+//                                   web paystub already pays (and vice versa),
+//                                   still-paid loads can't be made payable
+//                                   again, and only drafts can be deleted
 //  This module only turns the database's reason codes into carrier-facing
 //  messages. It never decides eligibility itself.
 // =============================================================================
@@ -27,6 +31,7 @@ export const INTEGRITY_CODES = [
   "paystub_not_draft",
   "paystub_not_voidable",
   "paystub_invalid_transition",
+  "paystub_not_deletable",
   "not_authenticated",
 ] as const;
 
@@ -43,6 +48,7 @@ const MESSAGES: Record<IntegrityCode, string> = {
   paystub_not_draft: "Only draft paystubs can be issued.",
   paystub_not_voidable: "Only issued or paid paystubs can be voided.",
   paystub_invalid_transition: "That status change isn't allowed for this paystub.",
+  paystub_not_deletable: "Only draft paystubs can be deleted. Void an issued or paid paystub instead.",
   not_authenticated: "Not signed in.",
 };
 

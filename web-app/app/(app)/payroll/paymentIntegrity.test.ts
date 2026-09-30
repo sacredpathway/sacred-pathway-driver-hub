@@ -114,3 +114,46 @@ describe("migration shape", () => {
     for (const u of updates) expect(u).toMatch(/\bwhere\b/);
   });
 });
+
+describe("cross-platform migration (20261001120100)", () => {
+  const m2 = readFileSync(
+    join(__dirname, "..", "..", "..", "..", "supabase", "migrations", "20261001120100_cross_platform_payment_integrity.sql"),
+    "utf8",
+  );
+  const code = m2.replace(/--.*$/gm, "");
+
+  it("guards iPhone approval, late line attach, still-paid release and non-draft delete", () => {
+    for (const t of [
+      "create trigger sph_settlements_guard_approval",
+      "create trigger sph_settlement_loads_guard",
+      "create trigger sph_loads_keep_paid_settled",
+      "create trigger sph_paystubs_guard_delete",
+    ]) expect(code).toContain(t);
+  });
+  it("sorts after the first integrity migration", () => {
+    expect("20261001120100" > "20261001120000").toBe(true);
+  });
+  it("is SECURITY INVOKER with pinned search_path, and additive", () => {
+    expect(code).not.toMatch(/security\s+definer/i);
+    const fns = (code.match(/create or replace function/g) ?? []).length;
+    expect((code.match(/security invoker/g) ?? []).length).toBe(fns);
+    expect((code.match(/set search_path = public, pg_temp/g) ?? []).length).toBe(fns);
+    expect(code).not.toMatch(/\balter\s+table\b/i);
+    expect(code).not.toMatch(/\bdrop\s+(table|column|policy|function)\b/i);
+    expect(code).not.toMatch(/\bcreate\s+policy\b/i);
+    expect(code).not.toMatch(/\b(update|delete\s+from|insert\s+into)\s+public\./i);
+  });
+  it("never uses phrases the iPhone app reads as 'database update missing'", () => {
+    const msgs = code.match(/v_msg := [^;]+;/g) ?? [];
+    expect(msgs.length).toBeGreaterThan(0);
+    for (const msg of msgs) expect(msg).not.toMatch(/does not exist|schema cache/i);
+  });
+});
+
+describe("deleteDraftAction", () => {
+  it("only deletes drafts and maps the database guard", () => {
+    const body = fnBody("deleteDraftAction");
+    expect(body).toMatch(/\.delete\(\)[\s\S]*\.eq\("status", "draft"\)/);
+    expect(body).toContain("integrityMessage(error)");
+  });
+});
