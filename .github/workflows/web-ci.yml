@@ -1,0 +1,57 @@
+name: Web CI
+
+# Install → lint → unit tests → production build for web-app/.
+# Read-only: never deploys, never talks to Supabase or Cloudflare.
+# The build uses PLACEHOLDER public env values purely so the prebuild
+# env-guard passes; the resulting bundle is thrown away.
+
+on:
+  push:
+    branches: [main]
+    paths: ["web-app/**", ".github/workflows/web-ci.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["web-app/**", ".github/workflows/web-ci.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-app
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web-app/package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build

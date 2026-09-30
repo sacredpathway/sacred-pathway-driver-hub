@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function FleetError({
   error,
   reset,
@@ -10,7 +12,7 @@ export default function FleetError({
   return (
     <section className="space-y-3 rounded-xl border border-sp-danger/40 bg-sp-danger/10 p-5">
       <h2 className="text-base font-semibold text-sp-danger">
-        Couldn't save that change
+        Couldn&apos;t save that change
       </h2>
       <p className="text-sm text-sp-textPrimary">{error.message}</p>
       <div className="flex flex-wrap items-center gap-2">
@@ -20,12 +22,12 @@ export default function FleetError({
         >
           Try again
         </button>
-        <a
+        <Link
           href="/fleet"
           className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-sp-textSecondary hover:bg-white/5"
         >
           Back to fleet
-        </a>
+        </Link>
       </div>
     </section>
   );

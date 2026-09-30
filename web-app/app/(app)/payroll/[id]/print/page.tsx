@@ -26,6 +26,7 @@
 
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { profileToBranding, signLogoUrl } from "@/lib/branding/profile";
 import { formatCurrency, formatDate } from "@/lib/format";
 import PrintButton from "./PrintButton";
 import PrintAutoTrigger from "../../../reports/PrintAutoTrigger";
@@ -78,16 +79,10 @@ export default async function PrintPaystubPage({
   const profile = profileRaw as Profile | null;
 
   // ---- W4 branding resolution ----
-  let logoUrl: string | null = null;
-  if (profile?.logo_storage_path) {
-    const { data: signed } = await supabase
-      .storage
-      .from("branding")
-      .createSignedUrl(profile.logo_storage_path, 60 * 60);
-    logoUrl = signed?.signedUrl ?? null;
-  }
-  const theme = resolvePaystubColors(profile?.paystub_theme ?? null);
-  const footerLegal = profile?.paystub_footer_legal?.trim() ?? "";
+  const branding = profileToBranding(profile);
+  const logoUrl = await signLogoUrl(supabase, branding.logoPath);
+  const theme = resolvePaystubColors(branding.paystubTheme);
+  const footerLegal = branding.footerLegal;
 
   const isW2 = paystub.worker_type === "W2";
   const autoprint = sp.autoprint === "1";

@@ -104,7 +104,7 @@ export default function LoadEditForm({
       <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
         <h2 className="text-base font-semibold text-sp-textPrimary">Financials</h2>
         <p className="mt-1 text-xs text-sp-textSecondary">
-          Total revenue is what's settled in payroll. Line haul + FSC + accessorials
+          Total revenue is what&apos;s settled in payroll. Line haul + FSC + accessorials
           are informational breakouts.
         </p>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -142,7 +142,7 @@ export default function LoadEditForm({
         <header className="mb-3">
           <h2 className="text-base font-semibold text-sp-textPrimary">Fleet assignment</h2>
           <p className="mt-1 text-xs text-sp-textSecondary">
-            Optional. Picking "— Unassigned —" explicitly clears the FK (sets to
+            Optional. Picking &quot;— Unassigned —&quot; explicitly clears the FK (sets to
             NULL). ON DELETE SET NULL applies if the truck/trailer is later removed.
           </p>
         </header>

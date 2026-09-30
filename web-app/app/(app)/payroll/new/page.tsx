@@ -53,7 +53,7 @@ export default async function NewPaystubPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">New paystub</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
-            Carrier HQ creates a draft. You'll review line items on the next screen before issuing.
+            Carrier HQ creates a draft. You&apos;ll review line items on the next screen before issuing.
           </p>
         </div>
         <Link href="/payroll" className="text-xs text-sp-textSecondary hover:text-sp-textPrimary">

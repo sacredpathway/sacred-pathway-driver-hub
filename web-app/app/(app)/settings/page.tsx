@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/supabase/types";
+import { signLogoUrl } from "@/lib/branding/profile";
 import CompanyProfileForm from "./CompanyProfileForm";
 import LogoCard from "./LogoCard";
 
@@ -33,14 +34,7 @@ export default async function SettingsPage() {
 
   const profile: Profile | null = (profileRaw ?? null) as Profile | null;
 
-  let logoUrl: string | null = null;
-  if (profile?.logo_storage_path) {
-    const { data: signed } = await supabase
-      .storage
-      .from("branding")
-      .createSignedUrl(profile.logo_storage_path, 60 * 60);
-    logoUrl = signed?.signedUrl ?? null;
-  }
+  const logoUrl = await signLogoUrl(supabase, profile?.logo_storage_path);
 
   return (
     <section className="space-y-6">

@@ -7,6 +7,8 @@
 
 "use client";
 
+import Link from "next/link";
+
 import { useActionState, useMemo, useState } from "react";
 import type { Driver, Load } from "@/lib/supabase/types";
 import type { PaystubActionState } from "../actions";
@@ -146,7 +148,7 @@ export default function NewPaystubForm({
                 Loads in this period
               </h2>
               <p className="mt-1 text-xs text-sp-textSecondary">
-                Selected loads become the gross settlement lines. You'll add
+                Selected loads become the gross settlement lines. You&apos;ll add
                 fuel / tolls / escrow / chargebacks on the next screen.
               </p>
             </div>
@@ -232,8 +234,8 @@ export default function NewPaystubForm({
         <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5 text-xs text-sp-textSecondary">
           <p>
             <strong className="text-sp-textPrimary">Employee payroll seed.</strong>{" "}
-            We'll pre-fill {compTypeHint(driver)} based on this driver's setup.
-            You'll enter the period's hours / miles / tax withholding on the
+            We&apos;ll pre-fill {compTypeHint(driver)} based on this driver&apos;s setup.
+            You&apos;ll enter the period&apos;s hours / miles / tax withholding on the
             next screen.
           </p>
         </section>
@@ -255,12 +257,12 @@ export default function NewPaystubForm({
 
       <div className="sticky bottom-0 -mx-4 border-t border-white/5 bg-sp-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-end gap-3">
-          <a
+          <Link
             href="/payroll"
             className="rounded-md border border-white/10 px-4 py-2 text-sm text-sp-textSecondary hover:bg-white/5"
           >
             Cancel
-          </a>
+          </Link>
           <button
             type="submit"
             disabled={pending}

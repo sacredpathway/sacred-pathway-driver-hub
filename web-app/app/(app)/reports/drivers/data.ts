@@ -2,7 +2,8 @@
 //  Driver earnings report — shared data fetch + aggregation
 // -----------------------------------------------------------------------------
 //  Per-driver rollup over the selected date range. Inputs:
-//    • loads  (revenue, miles) filtered by pickup_date in range
+//    • loads  (revenue, miles) attributed by delivery → pickup → created
+//      date (lib/loads/periodDate.ts)
 //    • paystubs/settlements (gross paid + net paid) filtered by check_date
 //    • drivers (to surface inactive drivers w/ zero activity if you choose)
 // =============================================================================
@@ -10,6 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Driver, Load, PayrollUnifiedRow } from "@/lib/supabase/types";
 import type { ResolvedRange } from "@/lib/reports/range";
+import { filterLoadsByRange, loadPeriodOrFilter, LOAD_PERIOD_COLUMNS } from "@/lib/loads/periodDate";
 
 export interface DriverEarningsRow {
   driver_id: string | null;
@@ -53,9 +55,8 @@ export async function fetchDriverEarningsReport(
         .select("id, name, worker_type, active"),
       supabase
         .from("loads")
-        .select("id, driver_id, total_miles, total_revenue, pickup_date")
-        .gte("pickup_date", range.from)
-        .lte("pickup_date", range.to),
+        .select(`id, driver_id, total_miles, total_revenue, ${LOAD_PERIOD_COLUMNS}`)
+        .or(loadPeriodOrFilter(range)),
       supabase
         .from("v_payroll_unified")
         .select("driver_id, gross_earnings, net_pay, check_date, created_at")
@@ -68,9 +69,12 @@ export async function fetchDriverEarningsReport(
   const drivers = (driversRaw ?? []) as Array<
     Pick<Driver, "id" | "name" | "worker_type" | "active">
   >;
-  const loads = (loadsRaw ?? []) as Array<
-    Pick<Load, "id" | "driver_id" | "total_miles" | "total_revenue" | "pickup_date">
-  >;
+  const loads = filterLoadsByRange(
+    (loadsRaw ?? []) as Array<
+      Pick<Load, "id" | "driver_id" | "total_miles" | "total_revenue" | "pickup_date" | "delivery_date" | "created_at">
+    >,
+    range,
+  );
   const paystubs = (paystubsRaw ?? []) as Array<
     Pick<PayrollUnifiedRow, "driver_id" | "gross_earnings" | "net_pay">
   >;

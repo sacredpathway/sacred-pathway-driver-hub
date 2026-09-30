@@ -13,6 +13,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
 import { resolveAccess } from "@/lib/entitlement/resolver";
+import { profileToBranding, signLogoUrl } from "@/lib/branding/profile";
 
 export const runtime = "edge";
 
@@ -36,18 +37,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .eq("id", targetProfileId)
       .maybeSingle();
 
-    if (!companyName) {
-      companyName = (profileRaw?.company_name as string | null) ?? null;
-    }
-    const logoPath = (profileRaw?.logo_storage_path as string | null) ?? null;
-
-    if (logoPath) {
-      const { data: signed } = await supabase
-        .storage
-        .from("branding")
-        .createSignedUrl(logoPath, 60 * 60);
-      logoUrl = signed?.signedUrl ?? null;
-    }
+    const branding = profileToBranding(profileRaw);
+    if (!companyName) companyName = branding.companyName;
+    logoUrl = await signLogoUrl(supabase, branding.logoPath);
   }
 
   return (

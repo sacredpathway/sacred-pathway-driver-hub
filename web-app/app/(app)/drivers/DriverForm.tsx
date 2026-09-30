@@ -16,6 +16,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { useState } from "react";
 import type {
@@ -362,12 +363,12 @@ export default function DriverForm({
       {/* ---------- Submit ---------- */}
       <div className="sticky bottom-0 -mx-4 border-t border-white/5 bg-sp-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-end gap-3">
-          <a
+          <Link
             href="/drivers"
             className="rounded-md border border-white/10 px-4 py-2 text-sm text-sp-textSecondary hover:bg-white/5"
           >
             Cancel
-          </a>
+          </Link>
           <button
             type="submit"
             disabled={pending}

@@ -26,6 +26,7 @@ import PeriodToggles from "./PeriodToggles";
 import DriverProgressCard from "./DriverProgressCard";
 import OutsideDriverPaywall from "./OutsideDriverPaywall";
 import { resolveAccess } from "@/lib/entitlement/resolver";
+import { filterLoadsByRange, loadPeriodOrFilter } from "@/lib/loads/periodDate";
 
 export const runtime = "edge";
 
@@ -72,12 +73,12 @@ export default async function DashboardPage({
   // pending paystub count, not the period-restricted view).
   // -----------------------------------------------------------------------
   // -----------------------------------------------------------------------
-  // Date-field semantics — must match iOS DashboardView.filterByPeriod which
-  // filters loads + expenses by `createdAt`, NOT by pickup_date / receipt_date.
-  // See SacredPathway/Views/Dashboard/DashboardView.swift lines 35-39 +
-  // filterByPeriod at line 353. For "all time" iOS returns every row (no
-  // filter applied), so we omit the gte/lte clauses entirely to include
-  // rows with NULL created_at as well as full history.
+  // Date-field semantics (changed 2026-09-30 to match iOS build 46):
+  //   LOADS are attributed by delivery_date → pickup_date → created_at via
+  //   lib/loads/periodDate.ts — the single rule shared with the reports.
+  //   EXPENSES still filter by created_at (unchanged).
+  // For "all time" every row is returned (no filter applied), so we omit the
+  // range clauses entirely to include undated rows as well as full history.
   //
   // created_at is a TIMESTAMPTZ — compare against full ISO instants so the
   // entire "to" day is inclusive (T23:59:59.999Z).
@@ -144,7 +145,7 @@ export default async function DashboardPage({
     const loadsQuery = (() => {
       let q = supabase.from("loads").select("*");
       if (!isAllTime) {
-        q = q.gte("created_at", fromInstant).lte("created_at", toInstant);
+        q = q.or(loadPeriodOrFilter(range));
       }
       return q.order("created_at", { ascending: false });
     })();
@@ -183,7 +184,9 @@ export default async function DashboardPage({
         .limit(10),
     ]);
 
-    loads    = (loadsRaw    ?? []) as Load[];
+    loads    = isAllTime
+      ? ((loadsRaw ?? []) as Load[])
+      : filterLoadsByRange((loadsRaw ?? []) as Load[], range);
     expenses = (expensesRaw ?? []) as Expense[];
     drivers  = (driversRaw  ?? []) as typeof drivers;
     paystubs = (paystubsRaw ?? []) as typeof paystubs;

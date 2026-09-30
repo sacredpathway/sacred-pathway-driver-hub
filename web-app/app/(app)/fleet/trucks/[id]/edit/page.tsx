@@ -47,7 +47,7 @@ export default async function EditTruckPage({
             Edit truck #{truck.unit_number}
           </h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
-            Changes save to this truck. Historical load assignments aren't affected.
+            Changes save to this truck. Historical load assignments aren&apos;t affected.
           </p>
         </div>
         <Link href="/fleet" className="text-xs text-sp-textSecondary hover:text-sp-textPrimary">
@@ -66,7 +66,7 @@ export default async function EditTruckPage({
       <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
         <h2 className="text-base font-semibold text-sp-textPrimary">Danger zone</h2>
         <p className="mt-1 text-xs text-sp-textSecondary">
-          Archive by setting Status to "Sold" or "Inactive" above — historical
+          Archive by setting Status to &quot;Sold&quot; or &quot;Inactive&quot; above — historical
           load attribution is preserved. Hard delete is refused automatically
           if any load references this truck.
         </p>

@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { PAYSTUB_THEMES, type PaystubTheme } from "@/lib/supabase/types";
 import { logActivity } from "@/lib/activity/log";
+import { BRANDING_BUCKET, logoStoragePath } from "@/lib/branding/profile";
 
 // -----------------------------------------------------------------------------
 // Validation helpers (same shape as drivers/loads actions)
@@ -271,12 +272,11 @@ export async function uploadLogoAction(
   // RLS on storage.objects requires (storage.foldername(name))[1] = auth.uid()::text.
   // Swift UUIDs are uppercase, Postgres auth.uid()::text is lowercase — always
   // build storage paths with lowercase UUIDs to avoid 403s on the policy check.
-  const profileId = user.id.toLowerCase();
-  const path = `${profileId}/logo.${extFromMime(file.type)}`;
+  const path = logoStoragePath(user.id, extFromMime(file.type));
 
   const { error: upErr } = await supabase
     .storage
-    .from("branding")
+    .from(BRANDING_BUCKET)
     .upload(path, file, {
       upsert: true,
       contentType: file.type,
@@ -323,7 +323,7 @@ export async function deleteLogoAction(): Promise<void> {
   if (path) {
     // Storage delete failures are logged but non-fatal — if the object is
     // already gone we still want to clear the DB column.
-    await supabase.storage.from("branding").remove([path]);
+    await supabase.storage.from(BRANDING_BUCKET).remove([path]);
   }
 
   await supabase
