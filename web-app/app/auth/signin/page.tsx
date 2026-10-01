@@ -3,6 +3,7 @@
 // the Apple Developer console and added to Supabase Auth → Providers.
 
 import SignInForm from "./SignInForm";
+import { safeNext } from "@/lib/auth/safeNext";
 
 // Next 15 ships `searchParams` (and `params`) as Promises into page
 // components. We await it once at the top of the function.
@@ -29,7 +30,7 @@ export default async function SignInPage({
           </div>
         )}
 
-        <SignInForm nextPath={sp.next ?? "/dashboard"} />
+        <SignInForm nextPath={safeNext(sp.next)} />
 
         <p className="mt-6 text-center text-xs text-sp-textSecondary">
           We’ll email you a one-tap sign-in link. Same account as the iPhone app.

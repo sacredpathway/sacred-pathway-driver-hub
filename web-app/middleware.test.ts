@@ -8,10 +8,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 type CookieCb = {
-  get(name: string): string | undefined;
-  set(name: string, value: string, options: Record<string, unknown>): void;
-  remove(name: string, options: Record<string, unknown>): void;
+  getAll(): { name: string; value: string }[];
+  setAll(cookies: { name: string; value: string; options: Record<string, unknown> }[]): void;
 };
+
+// What a real @supabase/ssr refresh writes in ONE setAll() call: the new
+// session split across two chunks, plus removal of a stale unchunked cookie.
+const REFRESH_WRITE = [
+  { name: "sb-test-auth-token.0", value: "new-chunk-0", options: { path: "/" } },
+  { name: "sb-test-auth-token.1", value: "new-chunk-1", options: { path: "/" } },
+  { name: "sb-test-auth-token", value: "", options: { path: "/", maxAge: 0 } },
+];
 
 const auth = {
   user: null as null | { id: string },
@@ -25,9 +32,11 @@ vi.mock("@supabase/ssr", () => ({
     auth: {
       getUser: async () => {
         auth.calls++;
-        auth.seenCookies.push(opts.cookies.get("sb-test-auth-token"));
+        auth.seenCookies.push(
+          opts.cookies.getAll().find((c) => c.name === "sb-test-auth-token")?.value,
+        );
         if (auth.refresh) {
-          opts.cookies.set("sb-test-auth-token", "refreshed-token", { path: "/" });
+          opts.cookies.setAll(REFRESH_WRITE);
         }
         return { data: { user: auth.user } };
       },
@@ -108,7 +117,8 @@ describe("signed out", () => {
     auth.refresh = true;
     const res = await middleware(req("/loads"));
     expect(signinTarget(res)?.pathname).toBe("/auth/signin");
-    expect(res.cookies.get("sb-test-auth-token")?.value).toBe("refreshed-token");
+    expect(res.cookies.get("sb-test-auth-token.0")?.value).toBe("new-chunk-0");
+    expect(res.cookies.get("sb-test-auth-token.1")?.value).toBe("new-chunk-1");
   });
 });
 
@@ -131,9 +141,38 @@ describe("signed in", () => {
   it("propagates refreshed cookies on pass-through and on the sign-in bounce", async () => {
     auth.refresh = true;
     const pass = await middleware(req("/dashboard"));
-    expect(pass.cookies.get("sb-test-auth-token")?.value).toBe("refreshed-token");
+    expect(pass.cookies.get("sb-test-auth-token.0")?.value).toBe("new-chunk-0");
     const bounce = await middleware(req("/auth/signin"));
-    expect(bounce.cookies.get("sb-test-auth-token")?.value).toBe("refreshed-token");
+    expect(bounce.cookies.get("sb-test-auth-token.0")?.value).toBe("new-chunk-0");
+  });
+
+  // Regression: the old per-cookie set() rebuilt the response on every call,
+  // so only the LAST chunk of a refresh reached the browser (old .0 + new .1
+  // → undecodable session → signed out ~1 h after login).
+  it("keeps EVERY chunk of one refresh on the same response", async () => {
+    auth.refresh = true;
+    for (const path of ["/dashboard", "/auth/signin"]) {
+      const res = await middleware(req(path, {
+        cookie: "sb-test-auth-token.0=old-chunk-0; sb-test-auth-token.1=old-chunk-1",
+      }));
+      const setCookie = res.headers.getSetCookie().join("\n");
+      expect(setCookie, path).toContain("sb-test-auth-token.0=new-chunk-0");
+      expect(setCookie, path).toContain("sb-test-auth-token.1=new-chunk-1");
+      expect(setCookie, path).not.toContain("old-chunk");
+      expect(res.cookies.get("sb-test-auth-token")?.value, path).toBe("");
+    }
+  });
+
+  it("forwards all refreshed chunks to downstream server components", async () => {
+    auth.refresh = true;
+    const res = await middleware(req("/dashboard", {
+      cookie: "sb-test-auth-token.0=old-chunk-0; sb-test-auth-token.1=old-chunk-1",
+    }));
+    // NextResponse.next({ request }) re-sends the mutated request cookies
+    // via the x-middleware-request-cookie override header.
+    const forwarded = res.headers.get("x-middleware-request-cookie") ?? "";
+    expect(forwarded).toContain("sb-test-auth-token.0=new-chunk-0");
+    expect(forwarded).toContain("sb-test-auth-token.1=new-chunk-1");
   });
 
   it("passes the request's session cookie to Supabase", async () => {

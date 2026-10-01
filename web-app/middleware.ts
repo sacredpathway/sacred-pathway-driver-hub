@@ -28,10 +28,22 @@
 //  onto the actual outbound response. We use a single helper
 //  (`propagateCookies`) so the three return sites (success, protected
 //  redirect, signed-in-on-signin redirect) all behave identically.
+//
+//  Chunk-loss fix (2026-10-01):
+//  ----------------------------
+//  The old per-cookie `set()` callback rebuilt `response` on EVERY call, so
+//  when a refresh wrote two chunks (.0 and .1) the second call discarded the
+//  first chunk's Set-Cookie. The browser kept the old .0 next to the new .1,
+//  the combined cookie no longer decoded, and because Supabase had already
+//  rotated the refresh token the session was lost about an hour after login.
+//  We now use the getAll()/setAll() cookie API so all cookies of one refresh
+//  land on the same response.
 // =============================================================================
 
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+
+type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
@@ -74,22 +86,19 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
+        getAll() {
+          return request.cookies.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
-          // Mirror onto the request so any downstream server components
-          // that fall through (not redirected) see the fresh cookie.
-          request.cookies.set({ name, value, ...options });
-          // Rebuild the working response with the updated request headers
-          // so the request cookies and response cookies stay in lockstep.
+        // Supabase hands over EVERY cookie of a refresh in one call (the
+        // session is chunked across sb-…-auth-token.0/.1, plus removals).
+        // Mirror them all onto the request, rebuild the response once, then
+        // stamp all of them on it — so no chunk is ever dropped.
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: "", ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value: "", ...options });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
         },
       },
     }
