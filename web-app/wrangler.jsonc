@@ -1,0 +1,29 @@
+// Cloudflare Workers config for Driver Hub web (OpenNext adapter).
+//
+// Replaces the Cloudflare Pages config (wrangler.toml / next-on-pages).
+// Deliberately contains NO routes, custom domains or account IDs: nothing in
+// this file can attach the Worker to app.sacredpathway.org. Re-pointing the
+// domain is a separate, manual, owner-approved step (see
+// docs/security/NEXTJS_WORKERS_UPGRADE.md).
+//
+// NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are inlined at
+// build time (scripts/check-required-env.mjs fails the build without them).
+// Runtime-only values (RESEND_API_KEY, RESEND_FROM_EMAIL, NEXT_PUBLIC_APP_URL)
+// are Worker vars/secrets set in the Cloudflare dashboard — never here.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "driver-hub-web-worker",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "driver-hub-web-worker"
+    }
+  ]
+}

@@ -7,8 +7,6 @@
 
 import Link from "next/link";
 
-export const runtime = "edge";
-
 interface Card {
   href: string;
   title: string;

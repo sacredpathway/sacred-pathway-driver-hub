@@ -31,8 +31,6 @@ import type {
   Driver,
 } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function PaystubDetailPage({
   params,
   searchParams,

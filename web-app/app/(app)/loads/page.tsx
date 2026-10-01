@@ -4,8 +4,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import type { Load, Truck, Trailer } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function LoadsPage({
   searchParams,
 }: {

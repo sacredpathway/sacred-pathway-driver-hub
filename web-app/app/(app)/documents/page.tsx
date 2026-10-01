@@ -21,8 +21,6 @@ import UploadCard from "./UploadCard";
 import DeleteDocButton from "./DeleteDocButton";
 import { DOCUMENT_TYPES } from "./constants";
 
-export const runtime = "edge";
-
 interface Filters {
   type?: string;
   broker?: string;

@@ -13,8 +13,6 @@ import DeleteFleetButton from "../../../DeleteFleetButton";
 import { updateTruckAction, deleteTruckAction } from "../../../actions";
 import type { Truck } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function EditTruckPage({
   params,
 }: {

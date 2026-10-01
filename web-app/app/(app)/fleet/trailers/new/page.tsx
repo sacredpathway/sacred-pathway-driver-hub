@@ -6,8 +6,6 @@ import Link from "next/link";
 import FleetForm from "../../FleetForm";
 import { createTrailerAction } from "../../actions";
 
-export const runtime = "edge";
-
 export default function NewTrailerPage() {
   return (
     <section className="space-y-4">

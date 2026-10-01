@@ -13,8 +13,6 @@ import DeleteFleetButton from "../../../DeleteFleetButton";
 import { updateTrailerAction, deleteTrailerAction } from "../../../actions";
 import type { Trailer } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function EditTrailerPage({
   params,
 }: {

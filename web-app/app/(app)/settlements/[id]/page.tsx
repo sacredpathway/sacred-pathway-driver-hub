@@ -16,8 +16,6 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import type { Paystub, Settlement, Driver } from "@/lib/supabase/types";
 import ConvertButton from "./ConvertButton";
 
-export const runtime = "edge";
-
 export default async function SettlementDetailPage({
   params,
 }: {

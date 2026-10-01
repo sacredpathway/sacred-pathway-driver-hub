@@ -10,8 +10,6 @@ import Link from "next/link";
 import DriverForm from "../DriverForm";
 import { createDriverAction } from "../actions";
 
-export const runtime = "edge";
-
 export default function NewDriverPage() {
   return (
     <section className="space-y-4">

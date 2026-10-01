@@ -11,32 +11,32 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepages:build": "node scripts/check-required-env.mjs",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "pages:dev": "wrangler pages dev --proxy 3000 -- npm run dev",
-    "pages:deploy": "wrangler pages deploy .vercel/output/static --project-name=driver-hub-web"
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "1.20.7",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "decimal.js": "^10.6.0",
     "lucide-react": "0.468.0",
-    "next": "15.0.7",
+    "next": "15.5.26",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@cloudflare/next-on-pages": "^1.13.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "15.0.7",
+    "eslint-config-next": "15.5.26",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "typescript": "^5",
     "vitest": "^3.2.7",
-    "wrangler": "^3.78.0"
+    "wrangler": "4.145.0"
   }
 }

@@ -17,8 +17,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { PayrollUnifiedRow, Driver } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 interface Filters {
   source?: "paystub" | "legacy_settlement";
   status?: string;

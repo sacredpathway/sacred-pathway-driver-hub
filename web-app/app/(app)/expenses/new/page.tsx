@@ -11,8 +11,6 @@ import ExpenseForm from "../ExpenseForm";
 import { createExpenseAction } from "../actions";
 import type { Load } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function NewExpensePage() {
   const supabase = await createClient();
   const { data: loadsRaw } = await supabase

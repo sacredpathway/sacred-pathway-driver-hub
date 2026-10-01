@@ -41,8 +41,6 @@ import type {
   Profile,
 } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function PrintPaystubPage({
   params,
   searchParams,

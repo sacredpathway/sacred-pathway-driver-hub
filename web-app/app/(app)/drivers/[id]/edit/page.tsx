@@ -20,8 +20,6 @@ import DriverForm from "../../DriverForm";
 import { updateDriverAction } from "../../actions";
 import type { Driver } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function EditDriverPage({
   params,
 }: {

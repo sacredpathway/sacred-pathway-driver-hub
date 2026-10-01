@@ -12,8 +12,6 @@ import GustoLinkButton from "@/components/GustoLinkButton";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { Paystub, Driver } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function PayrollPage() {
   const supabase = await createClient();
 

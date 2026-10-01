@@ -12,8 +12,6 @@ import { signLogoUrl } from "@/lib/branding/profile";
 import CompanyProfileForm from "./CompanyProfileForm";
 import LogoCard from "./LogoCard";
 
-export const runtime = "edge";
-
 export default async function SettingsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

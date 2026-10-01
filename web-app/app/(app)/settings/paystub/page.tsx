@@ -10,8 +10,6 @@ import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/supabase/types";
 import PaystubPrefsForm from "./PaystubPrefsForm";
 
-export const runtime = "edge";
-
 export default async function PaystubSettingsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -24,7 +24,7 @@ export async function createClient() {
   if (!url || !anonKey) {
     throw new Error(
       "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required. " +
-      "Set them in Cloudflare Pages → Settings → Environment Variables."
+      "They are inlined at build time — set them in the build environment (web-app/.env.local or CI)."
     );
   }
 

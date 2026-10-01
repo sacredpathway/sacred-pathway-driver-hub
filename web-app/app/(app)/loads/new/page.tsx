@@ -11,8 +11,6 @@ import { createClient } from "@/lib/supabase/server";
 import NewLoadForm from "./NewLoadForm";
 import type { Driver, Truck, Trailer } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function NewLoadPage() {
   const supabase = await createClient();
 

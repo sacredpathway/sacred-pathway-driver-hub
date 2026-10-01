@@ -3,8 +3,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type { Broker } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function BrokersPage() {
   const supabase = await createClient();
   const { data, error } = await supabase

@@ -11,8 +11,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-export const runtime = "edge";
-
 export async function GET(request: NextRequest) {
   const url        = new URL(request.url);
   const code       = url.searchParams.get("code");

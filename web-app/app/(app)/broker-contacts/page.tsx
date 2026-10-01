@@ -3,8 +3,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatDate } from "@/lib/format";
 import type { BrokerContact, Broker } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function BrokerContactsPage() {
   const supabase = await createClient();
   // Two queries instead of a join — keeps RLS auditing trivial and lets

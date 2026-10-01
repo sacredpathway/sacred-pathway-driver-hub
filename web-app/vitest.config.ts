@@ -12,7 +12,7 @@ export default defineConfig({
   esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
-    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx"],
+    include: ["middleware.test.ts", "lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx"],
     exclude: ["node_modules/**", ".next/**", ".vercel/**"],
   },
 });

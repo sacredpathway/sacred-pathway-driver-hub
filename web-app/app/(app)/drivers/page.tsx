@@ -12,8 +12,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatCurrency } from "@/lib/format";
 import type { Driver } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function DriversPage() {
   const supabase = await createClient();
   const { data, error } = await supabase

@@ -36,8 +36,6 @@ import {
 import OutsideDriverPaywall from "./OutsideDriverPaywall";
 import DashboardView from "./DashboardView";
 
-export const runtime = "edge";
-
 /** Every column exists in production `loads` (supabase/schema-contract). */
 const DASHBOARD_LOAD_COLUMNS =
   "id, load_number, driver_id, broker_name, origin, destination, pickup_date, delivery_date, " +

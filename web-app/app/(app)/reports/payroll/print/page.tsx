@@ -13,8 +13,6 @@ import { fetchPayrollReport } from "../data";
 import PrintShell from "../../PrintShell";
 import { formatCurrency, formatDate } from "@/lib/format";
 
-export const runtime = "edge";
-
 export default async function PayrollPrintPage({
   searchParams,
 }: {

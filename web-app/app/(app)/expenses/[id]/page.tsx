@@ -13,8 +13,6 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import type { Expense, Load } from "@/lib/supabase/types";
 import { deleteExpenseAction } from "../actions";
 
-export const runtime = "edge";
-
 export default async function ExpenseDetailPage({
   params,
   searchParams,

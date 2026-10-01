@@ -10,8 +10,6 @@ import RangePicker from "../RangePicker";
 import ReportToolbar from "../ReportToolbar";
 import { fetchExpenseReport } from "./data";
 
-export const runtime = "edge";
-
 export default async function ExpenseReportPage({
   searchParams,
 }: {

@@ -6,8 +6,10 @@
 //      server components downstream see a fresh session.
 //   2. Block unauthenticated visits to /(app) routes; redirect to /signin.
 //
-//  Cloudflare Pages requires middleware to use the Edge runtime — which
-//  @supabase/ssr supports out of the box. No Node-only APIs here.
+//  Next.js runs middleware on its Edge runtime; on Cloudflare Workers the
+//  OpenNext adapter bundles it into the Worker and runs it before every
+//  matched route. @supabase/ssr supports this out of the box. No Node-only
+//  APIs here.
 //
 //  Cookie-propagation fix (post-W9):
 //  -----------------------------------

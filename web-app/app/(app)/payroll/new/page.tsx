@@ -17,8 +17,6 @@ import { createPaystubAction } from "../actions";
 import type { Driver, Load } from "@/lib/supabase/types";
 import { isCancelledStatus } from "@/lib/loads/status";
 
-export const runtime = "edge";
-
 export default async function NewPaystubPage() {
   const supabase = await createClient();
 

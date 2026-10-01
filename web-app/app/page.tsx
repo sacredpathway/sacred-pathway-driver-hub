@@ -5,7 +5,9 @@ import Link from "next/link";
 
 import { APP_STORE_URL } from "@/lib/constants";
 
-export const runtime = "edge";
+// Rendered per request, as it was under the edge runtime (7be759e), so the
+// Worker never needs an incremental cache for this page.
+export const dynamic = "force-dynamic";
 
 export default function LandingPage() {
   return (

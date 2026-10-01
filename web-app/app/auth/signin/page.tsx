@@ -4,8 +4,6 @@
 
 import SignInForm from "./SignInForm";
 
-export const runtime = "edge";
-
 // Next 15 ships `searchParams` (and `params`) as Promises into page
 // components. We await it once at the top of the function.
 export default async function SignInPage({

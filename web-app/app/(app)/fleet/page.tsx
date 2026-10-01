@@ -11,8 +11,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatDate } from "@/lib/format";
 import type { Truck, Trailer, FleetStatus } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function FleetPage({
   searchParams,
 }: {

@@ -16,8 +16,6 @@ import AppShell from "@/components/shell/AppShell";
 import { resolveAccess } from "@/lib/entitlement/resolver";
 import { profileToBranding, signLogoUrl } from "@/lib/branding/profile";
 
-export const runtime = "edge";
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

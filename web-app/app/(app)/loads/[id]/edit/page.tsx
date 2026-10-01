@@ -12,8 +12,6 @@ import LoadEditForm from "./LoadEditForm";
 import { updateLoadAction } from "../../actions";
 import type { Load, Truck, Trailer } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function EditLoadPage({
   params,
 }: {

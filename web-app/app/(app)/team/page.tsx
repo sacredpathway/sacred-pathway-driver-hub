@@ -23,8 +23,6 @@ import InviteForm from "./InviteForm";
 import RemoveMemberButton from "./RemoveMemberButton";
 import RevokeInviteButton from "./RevokeInviteButton";
 
-export const runtime = "edge";
-
 export default async function TeamPage({
   searchParams,
 }: {

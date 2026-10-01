@@ -16,8 +16,6 @@ import { updateLoadAssignmentAction, deleteLoadAction } from "../actions";
 import type { Load, Truck, Trailer, Driver } from "@/lib/supabase/types";
 import { loadStatusLabel } from "@/lib/loads/status";
 
-export const runtime = "edge";
-
 export default async function LoadDetailPage({
   params,
   searchParams,

@@ -4,8 +4,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-export const runtime = "edge";
-
 export async function POST(request: NextRequest) {
   let response = NextResponse.redirect(new URL("/", request.url));
 

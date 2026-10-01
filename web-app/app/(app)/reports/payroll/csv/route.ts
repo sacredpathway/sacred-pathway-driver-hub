@@ -11,8 +11,6 @@ import { resolveRange } from "@/lib/reports/range";
 import { buildCsv, csvResponse, type CsvColumn } from "@/lib/reports/csv";
 import { fetchPayrollReport, type PayrollRow } from "../data";
 
-export const runtime = "edge";
-
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const range = resolveRange({

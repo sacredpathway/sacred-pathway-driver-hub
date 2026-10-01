@@ -17,8 +17,6 @@ import StatCard from "@/components/StatCard";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import type { Expense } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function ExpensesPage({
   searchParams,
 }: {
