@@ -1,9 +1,11 @@
 // =============================================================================
 //  UploadCard — Carrier HQ Phase W5
 // -----------------------------------------------------------------------------
-//  Multi-file picker + document-type + optional link-to-load. POSTs to
+//  Multi-file picker + optional type hint + optional link-to-load. POSTs to
 //  uploadDocumentsAction via useActionState so inline errors render without
-//  a full page reload.
+//  a full page reload. After a successful upload, every new non-duplicate
+//  document is sent to processDocumentAction (extract -> route) one at a
+//  time, with per-file status. Nothing waits on a bucket watcher.
 //
 //  Drag-and-drop is implemented in client JS — when files are dropped onto
 //  the card, they're pushed into the underlying <input type="file"> via
@@ -12,13 +14,17 @@
 
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import type { Load } from "@/lib/supabase/types";
 import {
+  processDocumentAction,
   uploadDocumentsAction,
   type DocumentActionState,
 } from "./actions";
-import { DOCUMENT_TYPES } from "./constants";
+import { UPLOAD_TYPE_CHOICES } from "./constants";
+import { documentTypeLabel } from "@/lib/documents/taxonomy";
+
+type ProcessingRow = { id: string; name: string; status: "queued" | "reading" | "done" | "review" | "failed"; message: string };
 
 export default function UploadCard({
   loads,
@@ -33,6 +39,45 @@ export default function UploadCard({
   >(uploadDocumentsAction, undefined);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [processing, setProcessing] = useState<ProcessingRow[]>([]);
+
+  // Upload succeeded -> read each new document now (sequentially, so one slow
+  // or failing file never blocks the others and costs stay predictable).
+  useEffect(() => {
+    const docs = state?.documents ?? [];
+    if (docs.length === 0) return;
+    let cancelled = false;
+    const rows: ProcessingRow[] = docs.map((d) => ({
+      id: d.id,
+      name: d.name,
+      status: d.duplicateOf ? "review" : "queued",
+      message: d.duplicateOf ? "Uploaded before — in review, not read again." : "Waiting…",
+    }));
+    setProcessing(rows);
+    (async () => {
+      for (const row of rows) {
+        if (cancelled || row.status !== "queued") continue;
+        setProcessing((cur) => cur.map((r) => (r.id === row.id ? { ...r, status: "reading", message: "Reading…" } : r)));
+        let next: ProcessingRow;
+        try {
+          const res = await processDocumentAction(row.id);
+          next = res.ok
+            ? {
+                ...row,
+                status: res.state === "auto_routed" ? "done" : res.state === "failed" ? "failed" : "review",
+                message: res.message,
+              }
+            : { ...row, status: "failed", message: res.error };
+        } catch {
+          next = { ...row, status: "failed", message: "Could not read — use Retry in the review list." };
+        }
+        if (!cancelled) setProcessing((cur) => cur.map((r) => (r.id === row.id ? next : r)));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state]);
   const [picked, setPicked] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
 
@@ -65,7 +110,8 @@ export default function UploadCard({
         <div>
           <h2 className="text-base font-semibold text-sp-textPrimary">Upload documents</h2>
           <p className="mt-1 text-xs text-sp-textSecondary">
-            Rate cons, BOLs, PODs, receipts, invoices. PDFs or images up to 20&nbsp;MB each.
+            Rate cons, BOLs, PODs, fuel/lumper/toll/repair receipts, CDLs, medical cards, MVRs.
+            Each file is read automatically; anything uncertain waits for your review.
           </p>
         </div>
       </header>
@@ -80,22 +126,49 @@ export default function UploadCard({
           Uploaded {state.uploaded} {state.uploaded === 1 ? "file" : "files"}.
         </div>
       )}
+      {state && state.ok && state.warning && (
+        <div className="mb-3 whitespace-pre-line rounded-md border border-sp-warning/40 bg-sp-warning/10 px-3 py-2 text-xs text-sp-warning">
+          {state.warning}
+        </div>
+      )}
+      {processing.length > 0 && (
+        <ul className="mb-3 space-y-1 rounded-lg bg-sp-cardLight px-3 py-2 text-xs" aria-live="polite">
+          {processing.map((r) => (
+            <li key={r.id} className="flex items-baseline justify-between gap-3">
+              <span className="truncate text-sp-textPrimary">{r.name}</span>
+              <span
+                className={
+                  r.status === "done"
+                    ? "text-sp-success"
+                    : r.status === "failed"
+                    ? "text-sp-danger"
+                    : r.status === "review"
+                    ? "text-sp-warning"
+                    : "text-sp-textSecondary"
+                }
+              >
+                {r.message}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* ---------- Document type ---------- */}
         <label className="block space-y-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-sp-textSecondary">
-            Document type
+            Document type (optional)
           </span>
           <select
             name="document_type"
             defaultValue=""
             className="w-full rounded-lg bg-sp-cardLight px-3 py-2 text-sm text-sp-textPrimary outline-none ring-1 ring-white/5 focus:ring-sp-gold"
           >
-            <option value="">— Auto / Unknown —</option>
-            {DOCUMENT_TYPES.map((t) => (
+            <option value="">Auto-detect (recommended)</option>
+            {UPLOAD_TYPE_CHOICES.map((t) => (
               <option key={t} value={t}>
-                {labelize(t)}
+                {documentTypeLabel(t)}
               </option>
             ))}
           </select>
@@ -152,7 +225,8 @@ export default function UploadCard({
           />
         </label>
         <p className="text-[11px] text-sp-textSecondary">
-          PDFs, JPG, PNG, WebP, HEIC. Up to 20 MB each. Multiple files OK.
+          PDFs, JPG, PNG, WebP, HEIC. Up to 20 MB each. Multiple files OK. HEIC photos are
+          stored but can&apos;t be read automatically — export them as JPEG for auto-filing.
         </p>
       </div>
 
@@ -185,10 +259,6 @@ export default function UploadCard({
 // Helpers (intentionally tiny — no shared util module yet)
 // -----------------------------------------------------------------------------
 
-function labelize(slug: string): string {
-  // "rate_confirmation" → "Rate Confirmation"; preserves trailing words
-  return slug.split("_").map((p) => p[0]?.toUpperCase() + p.slice(1)).join(" ");
-}
 
 function loadOptionLabel(
   l: Pick<Load, "id" | "load_number" | "broker_name" | "pickup_date">

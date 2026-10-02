@@ -106,6 +106,17 @@ export interface TruckDocument {
   storage_path: string;
   status: string | null;
   created_at: ISODate | null;
+  // Extraction / automation (20261002120000_document_automation.sql).
+  extracted_data?: unknown;
+  error_message?: string | null;
+  updated_at?: string | null;
+  source?: string | null;
+  content_sha256?: string | null;
+  extraction_version?: string | null;
+  duplicate_of?: UUID | null;
+  review_status?: "needs_review" | "auto_routed" | "approved" | "dismissed" | null;
+  routing?: unknown;
+  reviewed_at?: string | null;
 }
 
 export type PaystubTheme =
