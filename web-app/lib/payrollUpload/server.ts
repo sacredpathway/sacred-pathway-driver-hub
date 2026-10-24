@@ -38,6 +38,12 @@ export const PROPOSAL_LOAD_COLUMNS =
   "id, profile_id, driver_id, load_number, broker_name, broker_mc_number, pickup_date, delivery_date, origin, destination, " +
   "total_miles, empty_miles, line_haul_rate, fuel_surcharge, accessorial_charges, total_revenue, status";
 
+// settlement_loads has TWO foreign keys to settlements (settlement_id and
+// corrects_settlement_id), so PostgREST refuses an unqualified embed. Name the
+// relationship explicitly: the line's own settlement.
+export const SETTLEMENT_LINES_SELECT =
+  "settlement_id, load_id, is_adjustment, settlements!settlement_loads_settlement_id_fkey!inner(status, is_estimate, profile_id)";
+
 export async function getCarrierProfile(supabase: SupabaseClient, userId: string): Promise<CarrierProfileRow | null> {
   const { data, error } = await supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", userId).maybeSingle();
   if (error) throw new Error(error.message);
@@ -77,7 +83,7 @@ export async function readProposalInput(
   const [drv, lines, conflicts, docs, sha] = await Promise.all([
     supabase.from("drivers").select("id, profile_id, name, cdl_number, cdl_state, active").eq("profile_id", ownerId).limit(500),
     loadIds.length
-      ? supabase.from("settlement_loads").select("settlement_id, load_id, is_adjustment, settlements!inner(status, is_estimate, profile_id)").in("load_id", loadIds).eq("profile_id", ownerId)
+      ? supabase.from("settlement_loads").select(SETTLEMENT_LINES_SELECT).in("load_id", loadIds).eq("profile_id", ownerId)
       : Promise.resolve({ data: [], error: null }),
     loadIds.length
       ? supabase.rpc("sph_loads_payment_conflicts", { p_load_ids: loadIds })

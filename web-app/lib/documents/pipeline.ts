@@ -69,6 +69,7 @@ export interface DocumentRepo {
   insertDriverDocument(doc: AutomationDocument, draft: ComplianceDraft): Promise<InsertResult<Record<string, unknown>>>;
   getDriverDocumentBySource(documentId: string): Promise<Record<string, unknown> | null>;
   deleteDriverDocumentIfUnchanged(id: string, documentId: string, snapshot: Record<string, unknown>): Promise<boolean>;
+  /** True when the document is on a line of an approved/paid settlement. Throws when the check can't be completed. */
   documentInFinalizedSettlement(documentId: string): Promise<boolean>;
   log(entityId: string, action: string, metadata: Record<string, unknown>): Promise<void>;
 }
@@ -480,7 +481,14 @@ export async function undoAction(repo: DocumentRepo, id: string, index: number):
   if (a.undone_at) return { ok: false, error: "Already undone." };
 
   if (a.kind === "attach_load") {
-    if (await repo.documentInFinalizedSettlement(d.id)) {
+    // Fail closed: if the settlement check can't run, nothing is undone.
+    let finalized: boolean;
+    try {
+      finalized = await repo.documentInFinalizedSettlement(d.id);
+    } catch {
+      return { ok: false, error: "Couldn't verify the document's settlement status; nothing undone. Try again." };
+    }
+    if (finalized) {
       return { ok: false, error: "This document is part of an approved/paid settlement." };
     }
     const after = a.after.load_id as string;

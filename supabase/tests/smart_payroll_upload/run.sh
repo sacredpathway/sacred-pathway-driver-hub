@@ -48,8 +48,8 @@ filter() { sed -n 's/^psql:[^ ]* NOTICE:  //p; s/^NOTICE:  //p; /ERROR/p'; }
 FP_SQL="select md5(pg_get_functiondef('public.sph_web_save_settlement(jsonb)'::regprocedure)) || ' ' ||
   md5(pg_get_functiondef('public.sph_web_transition_settlement(jsonb)'::regprocedure)) || ' ' ||
   (select md5(string_agg(p.proname||':'||md5(pg_get_functiondef(p.oid)), ',' order by p.proname)) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname not in ('sph_documents_payroll_guard','sph_payroll_claims_guard','sph_payroll_fail','sph_payroll_claim','sph_payroll_claim_release','sph_payroll_claim_finalize','sph_payroll_claim_recover')) || ' ' ||
-  (select md5(string_agg(tgrelid::regclass::text||':'||tgname::text||':'||tgenabled::text, ',' order by 1)) from pg_trigger where not tgisinternal and tgname not in ('sph_documents_payroll_guard', 'sph_payroll_claims_guard')) || ' ' ||
-  (select md5(string_agg(schemaname||tablename||policyname||coalesce(qual,'')||coalesce(with_check,''), ',' order by 1)) from pg_policies where tablename <> 'document_payroll_claims')"
+  (select md5(string_agg(tgrelid::regclass::text||':'||tgname::text||':'||tgenabled::text, ',' order by tgrelid::regclass::text, tgname)) from pg_trigger where not tgisinternal and tgname not in ('sph_documents_payroll_guard', 'sph_payroll_claims_guard')) || ' ' ||
+  (select md5(string_agg(schemaname||tablename||policyname||coalesce(qual,'')||coalesce(with_check,''), ',' order by schemaname, tablename, policyname)) from pg_policies where tablename <> 'document_payroll_claims')"
 DATA_SQL="select md5(string_agg(t, '|' order by t)) from (
   select 'settlements:'||md5(coalesce(string_agg(x::text, ',' order by x.id), '')) t from public.settlements x union all
   select 'loads:'||md5(coalesce(string_agg(x::text, ',' order by x.id), '')) from public.loads x union all

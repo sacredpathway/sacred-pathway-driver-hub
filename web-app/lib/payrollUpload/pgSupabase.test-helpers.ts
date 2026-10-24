@@ -46,8 +46,30 @@ export async function runAs(pool: PgPoolLike, uid: string | null, sql: string, p
   }
 }
 
-/** "a, b, rel!inner(x, y)" -> select list over alias t (one embedded level). */
-function selectList(table: string, cols: string): { list: string; joins: string } {
+/** Many-to-one embed resolved like PostgREST: from the REAL foreign keys of
+ *  `table` -> `rel`. Unqualified + more than one FK -> PGRST201 (ambiguous);
+ *  `rel!fk_name!inner(...)` picks that FK; unknown FK -> PGRST200. */
+async function resolveEmbed(pool: PgPoolLike, table: string, rel: string, hint: string | null): Promise<string> {
+  const r = await runAs(pool, null,
+    `select coalesce(json_agg(json_build_object('name', c.conname::text, 'col', a.attname::text) order by c.conname), '[]'::json) as j
+       from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+      where c.contype = 'f' and c.conrelid = to_regclass('public.' || $1) and c.confrelid = to_regclass('public.' || $2)
+        and array_length(c.conkey, 1) = 1`, [table, rel]);
+  if (r.error) throw new EmbedError(r.error.message, "PGRST200");
+  const fks = (r.data ?? []) as { name: string; col: string }[];
+  if (hint) {
+    const hit = fks.find((f) => f.name === hint);
+    if (!hit) throw new EmbedError(`Could not find a relationship between '${table}' and '${rel}' in the schema cache`, "PGRST200");
+    return hit.col;
+  }
+  if (fks.length === 0) throw new EmbedError(`Could not find a relationship between '${table}' and '${rel}' in the schema cache`, "PGRST200");
+  if (fks.length > 1) throw new EmbedError(`Could not embed because more than one relationship was found for '${table}' and '${rel}'`, "PGRST201");
+  return fks[0].col;
+}
+class EmbedError extends Error { constructor(message: string, public code: string) { super(message); } }
+
+/** "a, b, rel!inner(x, y)" or "rel!fk_name!inner(x, y)" -> select list over alias t (one embedded level). */
+async function selectList(pool: PgPoolLike, table: string, cols: string): Promise<{ list: string; joins: string }> {
   const parts: string[] = [];
   let depth = 0, cur = "";
   for (const ch of cols) {
@@ -60,18 +82,18 @@ function selectList(table: string, cols: string): { list: string; joins: string 
   const joins: string[] = [];
   for (const p of parts) {
     if (p === "*") { list.push("t.*"); continue; }
-    const m = /^([a-z_]+)!inner\(([^)]*)\)$/.exec(p);
+    const m = /^([a-z_]+)(?:!([a-z_][a-z0-9_]*))?!inner\(([^)]*)\)$/.exec(p);
     if (m) {
       const rel = m[1];
-      const fk = `${rel.replace(/s$/, "")}_id`;
+      const fk = await resolveEmbed(pool, table, rel, m[2] ?? null);
       joins.push(`join public.${q(rel)} ${q(rel)} on ${q(rel)}.id = t.${q(fk)}`);
-      const inner = m[2].split(",").map((s) => s.trim()).filter(Boolean);
+      const inner = m[3].split(",").map((s) => s.trim()).filter(Boolean);
       list.push(`json_build_object(${inner.map((c) => `'${c}', ${q(rel)}.${q(c)}`).join(", ")}) as ${q(rel)}`);
       continue;
     }
+    if (p.includes("!") || p.includes("(")) throw new Error(`pgSupabase: unsupported select item ${JSON.stringify(p)}`);
     list.push(`t.${q(p)}`);
   }
-  void table;
   return { list: list.join(", "), joins: joins.join(" ") };
 }
 
@@ -119,21 +141,21 @@ class Builder implements PromiseLike<Result> {
   maybeSingle() { this.mode = "maybe"; return this; }
   single() { this.mode = "single"; return this; }
 
-  private sql(): string {
+  private async sql(): Promise<string> {
     const where = this.where.length ? `where ${this.where.join(" and ")}` : "";
     const tail = `${this.orderBy.length ? `order by ${this.orderBy.join(", ")}` : ""} ${this.lim !== null ? `limit ${Number(this.lim)}` : ""}`;
     if (this.op === "select") {
-      const { list, joins } = selectList(this.table, this.cols);
+      const { list, joins } = await selectList(this.pool, this.table, this.cols);
       return `select coalesce(json_agg(x), '[]'::json) as j from (select ${list} from public.${q(this.table)} t ${joins} ${where} ${tail}) x`;
     }
     if (this.op === "update") {
       const sets = Object.entries(this.patch as Record<string, unknown>).map(([k, v]) => `${q(k)} = ${this.p(v)}`);
-      const ret = this.returning ? selectList(this.table, this.returning).list : "t.id";
+      const ret = this.returning ? (await selectList(this.pool, this.table, this.returning)).list : "t.id";
       return `with t as (update public.${q(this.table)} t set ${sets.join(", ")} ${where} returning t.*) select coalesce(json_agg(x), '[]'::json) as j from (select ${ret} from t) x`;
     }
     const rows = Array.isArray(this.patch) ? this.patch : [this.patch as Record<string, unknown>];
     const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
-    const ret = this.returning ? selectList(this.table, this.returning).list : "t.id";
+    const ret = this.returning ? (await selectList(this.pool, this.table, this.returning)).list : "t.id";
     const json = this.p(JSON.stringify(rows));
     return `with t as (insert into public.${q(this.table)} (${keys.map(q).join(", ")})
               select ${keys.map(q).join(", ")} from json_populate_recordset(null::public.${q(this.table)}, ${json}::json) returning *)
@@ -141,7 +163,12 @@ class Builder implements PromiseLike<Result> {
   }
 
   async run(): Promise<Result> {
-    const r = await runAs(this.pool, this.uid, this.sql(), this.params);
+    let text: string;
+    try { text = await this.sql(); } catch (e) {
+      if (e instanceof EmbedError) return { data: null, error: { message: e.message, code: e.code, details: null, hint: null } };
+      throw e;
+    }
+    const r = await runAs(this.pool, this.uid, text, this.params);
     if (r.error) return r;
     const rows = (r.data ?? []) as unknown[];
     if (this.mode === "maybe") {

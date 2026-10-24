@@ -2,40 +2,76 @@
 //  Smart Payroll Upload — confirmation gate (pure)
 // -----------------------------------------------------------------------------
 //  The review screen is read-only everywhere. The "Confirm to draft" write
-//  path is OFF unless BOTH are true:
+//  path is OFF unless ONE of these exact pairs is true:
 //    1. SMART_PAYROLL_CONFIRM === "local-only"
-//    2. the Supabase URL points at this machine (127.0.0.1 / localhost)
-//  Production (https://<ref>.supabase.co) can never satisfy (2), so setting
-//  the variable there by mistake still leaves confirmation disabled. Turning
-//  it on for staging later is a deliberate code change, not a config flip.
+//       AND the Supabase URL points at this machine (127.0.0.1 / localhost)
+//    2. SMART_PAYROLL_CONFIRM === "staging-only"
+//       AND the Supabase URL is exactly https://<STAGING_PROJECT_REF>.supabase.co
+//       (the synthetic-data staging project; hard-coded on purpose)
+//  Production (https://rmzqxsfhjqrshhdjzhze.supabase.co) can never satisfy
+//  either pair, and it is refused explicitly as well, so setting the
+//  variable there by mistake still leaves confirmation disabled. Enabling
+//  production is a separate, deliberate code change.
 // =============================================================================
 
-export type GateReason = "flag_off" | "not_local_database" | "missing_database_url" | "enabled_local_only";
+export type GateReason =
+  | "flag_off"
+  | "not_local_database"
+  | "not_staging_database"
+  | "production_database"
+  | "missing_database_url"
+  | "enabled_local_only"
+  | "enabled_staging_only";
 
 export interface ConfirmGate {
   enabled: boolean;
   reason: GateReason;
 }
 
+/** Synthetic-data staging project (sph-settlements-staging). */
+export const STAGING_PROJECT_REF = "aatkirzwuuegurdlmcpl";
+/** Production project: never enabled by this gate. */
+export const PRODUCTION_PROJECT_REF = "rmzqxsfhjqrshhdjzhze";
+
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
-export function payrollConfirmGate(env: Readonly<Record<string, string | undefined>>): ConfirmGate {
-  if (env.SMART_PAYROLL_CONFIRM !== "local-only") return { enabled: false, reason: "flag_off" };
-  const url = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  if (!url) return { enabled: false, reason: "missing_database_url" };
-  let host: string;
+function parse(url: string): URL | null {
   try {
-    host = new URL(url).hostname.toLowerCase();
+    return new URL(url);
   } catch {
-    return { enabled: false, reason: "missing_database_url" };
+    return null;
   }
-  if (!LOCAL_HOSTS.has(host)) return { enabled: false, reason: "not_local_database" };
-  return { enabled: true, reason: "enabled_local_only" };
+}
+
+export function payrollConfirmGate(env: Readonly<Record<string, string | undefined>>): ConfirmGate {
+  const mode = env.SMART_PAYROLL_CONFIRM;
+  if (mode !== "local-only" && mode !== "staging-only") return { enabled: false, reason: "flag_off" };
+  const raw = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  if (!raw) return { enabled: false, reason: "missing_database_url" };
+  const url = parse(raw);
+  if (!url) return { enabled: false, reason: "missing_database_url" };
+  const host = url.hostname.toLowerCase();
+  if (host === `${PRODUCTION_PROJECT_REF}.supabase.co` || host.includes(PRODUCTION_PROJECT_REF)) {
+    return { enabled: false, reason: "production_database" };
+  }
+  if (mode === "local-only") {
+    if (!LOCAL_HOSTS.has(host)) return { enabled: false, reason: "not_local_database" };
+    return { enabled: true, reason: "enabled_local_only" };
+  }
+  // staging-only: exact https origin of the staging project, nothing else.
+  if (url.protocol !== "https:" || host !== `${STAGING_PROJECT_REF}.supabase.co` || url.port !== "" ||
+      url.username !== "" || url.password !== "") {
+    return { enabled: false, reason: "not_staging_database" };
+  }
+  return { enabled: true, reason: "enabled_staging_only" };
 }
 
 export const GATE_MESSAGE: Record<GateReason, string> = {
   flag_off: "Confirming payroll drafts from documents is turned off in this environment. You can review everything; nothing will be saved.",
   not_local_database: "Confirming payroll drafts from documents only runs against a local test database. Nothing will be saved here.",
+  not_staging_database: "Confirming payroll drafts from documents only runs against the staging test project. Nothing will be saved here.",
+  production_database: "Confirming payroll drafts from documents is not enabled for the live system yet. You can review everything; nothing will be saved.",
   missing_database_url: "Confirming payroll drafts is unavailable: no database is configured.",
   enabled_local_only: "Local test mode: confirming creates a DRAFT in the local test database only.",
+  enabled_staging_only: "Staging test mode: confirming creates a DRAFT in the staging test project only (synthetic data).",
 };

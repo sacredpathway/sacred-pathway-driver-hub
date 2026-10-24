@@ -318,3 +318,66 @@ describe("audit + safe undo", () => {
     expect(st.docs.get(doc.id)!.load_id).toBeNull();
   });
 });
+
+describe("undo attach-load: approved/paid settlement protection (Step 5)", () => {
+  /** A rate con auto-attached to a load, ready to be undone. */
+  async function attached() {
+    const { st, repo } = setup();
+    const load = strongLoad(st);
+    const rc = addDoc(st);
+    st.modelOutput.set(rc.id, RATE_CON());
+    await processDocument(repo, rc.id);
+    expect(st.docs.get(rc.id)!.load_id).toBe(load.id);
+    return { st, repo, load, rc };
+  }
+
+  it("an APPROVED settlement blocks undo attach-load and changes nothing", async () => {
+    const { st, repo, load, rc } = await attached();
+    st.settlementStatusByDoc.set(rc.id, "approved");
+    const routingBefore = JSON.stringify(st.docs.get(rc.id)!.routing);
+    const logsBefore = st.logs.length;
+    expect(await undoAction(repo, rc.id, 0)).toEqual({ ok: false, error: "This document is part of an approved/paid settlement." });
+    expect(st.docs.get(rc.id)!.load_id).toBe(load.id);
+    expect(JSON.stringify(st.docs.get(rc.id)!.routing)).toBe(routingBefore);
+    expect(st.logs.length).toBe(logsBefore);
+  });
+
+  it("a PAID settlement blocks undo attach-load and changes nothing", async () => {
+    const { st, repo, load, rc } = await attached();
+    st.settlementStatusByDoc.set(rc.id, "paid");
+    expect(await undoAction(repo, rc.id, 0)).toEqual({ ok: false, error: "This document is part of an approved/paid settlement." });
+    expect(st.docs.get(rc.id)!.load_id).toBe(load.id);
+    expect(st.docs.get(rc.id)!.routing!.applied[0].undone_at ?? null).toBeNull();
+  });
+
+  it("a failed settlement check FAILS CLOSED: nothing undone, nothing logged", async () => {
+    const { st, repo, load, rc } = await attached();
+    st.settlementCheckError = "Could not embed because more than one relationship was found for 'settlement_loads' and 'settlements'";
+    const routingBefore = JSON.stringify(st.docs.get(rc.id)!.routing);
+    const logsBefore = st.logs.length;
+    const r = await undoAction(repo, rc.id, 0);
+    expect(r).toEqual({ ok: false, error: "Couldn't verify the document's settlement status; nothing undone. Try again." });
+    expect(st.docs.get(rc.id)!.load_id).toBe(load.id);
+    expect(JSON.stringify(st.docs.get(rc.id)!.routing)).toBe(routingBefore);
+    expect(st.logs.length).toBe(logsBefore);
+    // Once the check works again, the eligible undo proceeds.
+    st.settlementCheckError = null;
+    expect(await undoAction(repo, rc.id, 0)).toEqual({ ok: true });
+  });
+
+  for (const status of ["draft", "ready_for_review", "voided"]) {
+    it(`an eligible (${status}) settlement still allows undo attach-load`, async () => {
+      const { st, repo, rc } = await attached();
+      st.settlementStatusByDoc.set(rc.id, status);
+      expect(await undoAction(repo, rc.id, 0)).toEqual({ ok: true });
+      expect(st.docs.get(rc.id)!.load_id).toBeNull();
+      expect(st.docs.get(rc.id)!.routing!.applied[0].undone_at).toBeTruthy();
+    });
+  }
+
+  it("a document on no settlement still allows undo attach-load", async () => {
+    const { st, repo, rc } = await attached();
+    expect(await undoAction(repo, rc.id, 0)).toEqual({ ok: true });
+    expect(st.docs.get(rc.id)!.load_id).toBeNull();
+  });
+});

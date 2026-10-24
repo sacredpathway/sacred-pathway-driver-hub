@@ -27,6 +27,10 @@ export interface FakeState {
   /** loads paid by an issued paystub / approved settlement */
   paidLoads: Set<string>;
   finalizedSettlementDocs: Set<string>;
+  /** status of the settlement whose line references the document (rate con / POD) */
+  settlementStatusByDoc: Map<string, string>;
+  /** when set, documentInFinalizedSettlement fails like a query error */
+  settlementCheckError: string | null;
   logs: Array<{ entityId: string; action: string; metadata: Record<string, unknown> }>;
   extractorCalls: Array<{ id: string; hint: string | null }>;
   /** What the "Edge Function" returns for a document id (raw model JSON). */
@@ -43,6 +47,8 @@ export function newState(): FakeState {
     compliance: [],
     paidLoads: new Set(),
     finalizedSettlementDocs: new Set(),
+    settlementStatusByDoc: new Map(),
+    settlementCheckError: null,
     logs: [],
     extractorCalls: [],
     modelOutput: new Map(),
@@ -248,7 +254,9 @@ export function createFakeRepo(st: FakeState, ownerId = OWNER, now = new Date("2
       return true;
     },
     async documentInFinalizedSettlement(documentId) {
-      return st.finalizedSettlementDocs.has(documentId);
+      if (st.settlementCheckError) throw new Error(st.settlementCheckError);
+      const status = st.settlementStatusByDoc.get(documentId);
+      return st.finalizedSettlementDocs.has(documentId) || status === "approved" || status === "paid";
     },
     async log(entityId, action, metadata) {
       st.logs.push({ entityId, action, metadata });

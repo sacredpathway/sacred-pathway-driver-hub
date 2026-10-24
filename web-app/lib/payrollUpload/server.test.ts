@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { addLoadToDraftVia, bundleToEditPayload, claimErrorOf, claimVia, finalizeClaimVia, readProposalInput, recoverVia, releaseClaimVia, CLAIM_UNAVAILABLE } from "./server";
+import { addLoadToDraftVia, bundleToEditPayload, claimErrorOf, claimVia, finalizeClaimVia, readProposalInput, recoverVia, releaseClaimVia, CLAIM_UNAVAILABLE, SETTLEMENT_LINES_SELECT } from "./server";
 import { makeConfirmDeps } from "./wire";
 import { DOC, DRAFT, DRIVER, LOAD, OTHER, OWNER, PROFILE, doc, load } from "./proposal.test-helpers";
 import * as fx from "./fixtures";
@@ -178,5 +178,36 @@ describe("makeConfirmDeps", () => {
     await on.createDraft({ driverId: DRIVER, periodStart: "2026-10-12", periodEnd: "2026-10-18", loadIds: [LOAD], applyRecurring: false, hoursWorked: "" });
     expect(createSettlementAction).toHaveBeenCalledTimes(1);
     void fx;
+  });
+});
+
+describe("readProposalInput: settlement_loads -> settlements relationship (Step 3 D1 regression)", () => {
+  // settlement_loads has two FKs to settlements (settlement_id, corrects_settlement_id).
+  // An unqualified `settlements!inner(...)` embed is rejected by PostgREST (PGRST201).
+  it("names the settlement_id foreign key explicitly", async () => {
+    const { client, queries } = fakeSupabase((q) => {
+      if (q.table === "loads") return [load()];
+      if (q.table === "settlement_loads") return [{ settlement_id: DRAFT, load_id: LOAD, is_adjustment: false, settlements: { status: "draft", is_estimate: false, profile_id: OWNER } }];
+      return [];
+    });
+    const inp = await readProposalInput(client, doc(), PROFILE, {}, "2026-10-24");
+    const lines = queries.filter((q) => q.table === "settlement_loads" && q.op === "select");
+    expect(lines.length).toBe(1);
+    expect(lines[0].cols).toBe(SETTLEMENT_LINES_SELECT);
+    expect(lines[0].cols).toContain("settlements!settlement_loads_settlement_id_fkey!inner(status, is_estimate, profile_id)");
+    expect(lines[0].cols).not.toMatch(/(^|[\s,])settlements!inner\(/);
+    expect(lines[0].cols).not.toContain("corrects_settlement_id");
+    // The embed key is still `settlements`, so the mapping is unchanged.
+    expect(inp.settlementLines).toEqual([{ settlement_id: DRAFT, load_id: LOAD, is_adjustment: false, settlement_status: "draft", is_estimate: false }]);
+  });
+
+  it("no payroll-upload source embeds settlements from settlement_loads without naming the FK", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dir = path.dirname(new URL(import.meta.url).pathname);
+    for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".ts") && !n.includes(".test"))) {
+      const src = fs.readFileSync(path.join(dir, f), "utf8");
+      expect(src, f).not.toMatch(/(["\s,(])settlements!inner\(/);
+    }
   });
 });
