@@ -28,7 +28,21 @@ export const AUTOMATION_DOCUMENT_COLUMNS =
 const LOAD_COLUMNS =
   "id, profile_id, load_number, broker_name, pickup_date, delivery_date, origin, destination, total_revenue, status";
 
-const EXPENSE_SNAPSHOT_KEYS = ["category", "amount", "vendor_name", "receipt_date", "description", "load_id"] as const;
+// settlement_loads has TWO foreign keys to settlements (settlement_id and
+// corrects_settlement_id); PostgREST refuses an unqualified embed. Name the
+// line's own settlement explicitly.
+export const FINALIZED_SETTLEMENT_LINES_SELECT = "id, settlements!settlement_loads_settlement_id_fkey!inner(status)";
+export const FINALIZED_SETTLEMENT_STATUSES = ["approved", "paid"];
+
+/** The approved/paid-settlement check could not be completed (query error). */
+export class SettlementCheckError extends Error {
+  constructor(detail: string) {
+    super(`settlement check failed: ${detail}`);
+    this.name = "SettlementCheckError";
+  }
+}
+
+const EXPENSE_SNAPSHOT_KEYS =["category", "amount", "vendor_name", "receipt_date", "description", "load_id"] as const;
 const COMPLIANCE_SNAPSHOT_KEYS = ["driver_id", "document_kind", "title", "issue_date", "expiration_date"] as const;
 
 /** Builds an ilike pattern that matches any spelling of a normalised id ("RC1001" -> "%R%C%1%0%0%1%"). */
@@ -267,12 +281,14 @@ export function createDocumentRepo(supabase: SupabaseClient, ownerId: string): D
     },
 
     async documentInFinalizedSettlement(documentId) {
-      const { data } = await 
+      const { data, error } = await
         supabase
           .from("settlement_loads")
-          .select("id, settlements!inner(status)")
-          .or(`rate_confirmation_document_id.eq.${documentId},proof_of_delivery_document_id.eq.${documentId}`).eq("profile_id", ownerId).in("settlements.status", ["approved", "paid"]);
-      return Array.isArray(data) && data.length > 0;
+          .select(FINALIZED_SETTLEMENT_LINES_SELECT)
+          .or(`rate_confirmation_document_id.eq.${documentId},proof_of_delivery_document_id.eq.${documentId}`).eq("profile_id", ownerId).in("settlements.status", FINALIZED_SETTLEMENT_STATUSES);
+      // Fail closed: if the check can't run, the caller must not proceed.
+      if (error || !Array.isArray(data)) throw new SettlementCheckError(error?.message ?? "no result");
+      return data.length > 0;
     },
 
     async log(entityId, action, metadata) {
