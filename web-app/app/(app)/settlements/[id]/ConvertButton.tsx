@@ -1,3 +1,4 @@
+// UNUSED since 2026-10-23: web paystubs are read-only legacy; the convert action now refuses. Safe to delete.
 // =============================================================================
 //  ConvertButton — Carrier HQ Phase W7
 // -----------------------------------------------------------------------------

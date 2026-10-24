@@ -1,0 +1,138 @@
+{
+  "mode": "create",
+  "settlement_id": "5e000000-0000-4000-8000-0000000000ff",
+  "expected_updated_at": null,
+  "header": {
+    "driver_id": "aaaaaaaa-0000-0000-0000-00000000d001",
+    "settlement_period_start": "2026-10-12",
+    "settlement_period_end": "2026-10-18",
+    "settlement_number": "SP-2026-0901",
+    "settlement_type": "company_driver",
+    "truck_number": "12",
+    "pay_rule": {
+      "components": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "kind": "percent_of_gross",
+          "label": "Percentage of Gross",
+          "mile_basis": "loaded",
+          "percent": 27.5
+        }
+      ],
+      "fee_terms": {
+        "dispatcher_fee_percent": 0,
+        "factoring_fee_percent": 2.5,
+        "authority_fee": 0,
+        "maintenance_reserve": 0,
+        "dispatcher_fee_responsibility": "company",
+        "factoring_fee_responsibility": "company",
+        "authority_fee_responsibility": "company",
+        "maintenance_reserve_responsibility": "company"
+      }
+    },
+    "pay_on_gross_revenue": true,
+    "hours_worked": null,
+    "notes": "Contract fixture",
+    "is_estimate": false,
+    "gross_load_revenue": "3237.95",
+    "total_driver_earnings": "890.44",
+    "total_additions": "25.00",
+    "total_deductions": "111.11",
+    "company_retained": "2130.45",
+    "company_expenses": "303.17",
+    "loaded_miles": "1065.40",
+    "deadhead_miles": "42.00",
+    "total_miles": "1107.40",
+    "total_revenue": "3237.95",
+    "total_expenses": "303.17",
+    "gross_profit": "2934.78",
+    "driver_pay_amount": "890.44",
+    "net_pay": "804.33",
+    "engine_version": "settlement-engine/1.0",
+    "driver_pay_percentage": "27.5",
+    "dispatcher_fee_percentage": "0",
+    "factoring_fee_percentage": "2.5",
+    "dispatcher_fee_amount": "0.00",
+    "factoring_fee_amount": "80.95",
+    "authority_fee": "0.00",
+    "maintenance_reserve": "0.00"
+  },
+  "loads": [
+    {
+      "id": "f1000000-0000-4000-8000-000000000001",
+      "settlement_id": "5e000000-0000-4000-8000-0000000000ff",
+      "profile_id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "load_id": "aaaaaaaa-0000-0000-0000-0000000a0001",
+      "load_number": "L1",
+      "broker_name": "TQL",
+      "broker_mc_number": null,
+      "pickup_date": "2026-10-13",
+      "delivery_date": "2026-10-14",
+      "origin": "Dallas, TX",
+      "destination": "Phoenix, AZ",
+      "loaded_miles": "1065.40",
+      "deadhead_miles": "42.00",
+      "linehaul": "2850.55",
+      "fuel_surcharge": "312.40",
+      "accessorials": "75.00",
+      "detention": "0.00",
+      "layover": "0.00",
+      "tonu": "0.00",
+      "lumper_reimbursement": "0.00",
+      "gross_rate_override": null,
+      "pay_rule_override": null,
+      "hours_worked": null,
+      "driver_earnings": "890.44",
+      "pay_basis_description": "27.5% of $3,237.95",
+      "notes": null,
+      "is_adjustment": false,
+      "corrects_settlement_id": null,
+      "sort_order": 0
+    }
+  ],
+  "additions": [
+    {
+      "id": "f1000000-0000-4000-8000-0000000000a1",
+      "settlement_id": "5e000000-0000-4000-8000-0000000000ff",
+      "profile_id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "category": "other",
+      "description": "Phone stipend",
+      "amount": "25.00",
+      "date": null,
+      "related_load_id": null,
+      "notes": null,
+      "sort_order": 0,
+      "custom_category_id": null
+    }
+  ],
+  "deductions": [
+    {
+      "id": "f1000000-0000-4000-8000-0000000000d1",
+      "settlement_id": "5e000000-0000-4000-8000-0000000000ff",
+      "profile_id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "category": "repair",
+      "description": "Tire",
+      "amount": "333.33",
+      "date": null,
+      "related_load_id": null,
+      "related_expense_id": null,
+      "notes": null,
+      "responsibility": "split",
+      "driver_share_percent": "33.333",
+      "recurring_deduction_id": null,
+      "advance_id": null,
+      "sort_order": 2000,
+      "custom_category_id": null
+    }
+  ],
+  "audit": [
+    {
+      "action": "created",
+      "summary": "Settlement created for Driver A1, Oct 12 – Oct 18, 2026 · SP-2026-0901",
+      "field_name": null,
+      "previous_value": null,
+      "new_value": null,
+      "actor_name": "owner@example.com"
+    }
+  ]
+}

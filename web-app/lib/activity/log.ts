@@ -44,7 +44,9 @@ export type ActivityAction =
   | "needs_review"
   | "approved"
   | "dismissed"
-  | "undone";
+  | "undone"
+  // settlements
+  | "reopened";
 
 export interface LogActivityInput {
   entityType: ActivityEntityType;

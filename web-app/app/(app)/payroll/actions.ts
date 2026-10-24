@@ -28,6 +28,8 @@
 
 "use server";
 
+import { assertLegacyPaystubWritesAllowed } from "@/lib/payroll/legacy";
+
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -141,6 +143,7 @@ export async function createPaystubAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   let driverId: string;
   let periodStart: string;
   let periodEnd: string;
@@ -291,6 +294,7 @@ export async function updatePaystubHeaderAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   if (!paystubId) return { ok: false, error: "Missing paystub id." };
 
   let periodStart: string;
@@ -404,6 +408,7 @@ export async function addEarningAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -460,6 +465,7 @@ export async function addDeductionAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -501,6 +507,7 @@ export async function addTaxAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -546,6 +553,7 @@ export async function addSettlementItemAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -611,6 +619,7 @@ export async function addLoadToDraftAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -718,6 +727,7 @@ export async function updateDraftHeaderAction(
   _prev: PaystubActionState | undefined,
   formData: FormData
 ): Promise<PaystubActionState> {
+  assertLegacyPaystubWritesAllowed();
   if (!paystubId) return { ok: false, error: "Missing paystub id." };
 
   let paymentMethod: PaymentMethod | null;
@@ -814,6 +824,7 @@ export async function removeLineAction(
   table: LineTable,
   lineId: string
 ): Promise<void> {
+  assertLegacyPaystubWritesAllowed();
   if (!LINE_TABLES.includes(table)) throw new Error("Invalid line table.");
   if (!lineId) throw new Error("Missing line id.");
 
@@ -895,6 +906,7 @@ type IssueResult = {
 };
 
 export async function issuePaystubAction(paystubId: string): Promise<void> {
+  assertLegacyPaystubWritesAllowed();
   if (!paystubId) throw new Error("Missing paystub id.");
 
   const supabase = await createClient();
@@ -947,6 +959,7 @@ export async function issuePaystubAction(paystubId: string): Promise<void> {
 // =============================================================================
 
 export async function voidPaystubAction(paystubId: string): Promise<void> {
+  assertLegacyPaystubWritesAllowed();
   if (!paystubId) throw new Error("Missing paystub id.");
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -979,6 +992,7 @@ export async function voidPaystubAction(paystubId: string): Promise<void> {
 // =============================================================================
 
 export async function markPaidAction(paystubId: string): Promise<void> {
+  assertLegacyPaystubWritesAllowed();
   if (!paystubId) throw new Error("Missing paystub id.");
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -1005,6 +1019,7 @@ export async function markPaidAction(paystubId: string): Promise<void> {
 // =============================================================================
 
 export async function deleteDraftAction(paystubId: string): Promise<void> {
+  assertLegacyPaystubWritesAllowed();
   if (!paystubId) throw new Error("Missing paystub id.");
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

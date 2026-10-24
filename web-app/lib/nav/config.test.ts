@@ -40,9 +40,14 @@ describe("navigation destinations", () => {
     );
   });
 
-  it("has no 'create settlement' destination before Phase D", () => {
-    const all = allNavItems().flatMap((i) => [i.href, i.primaryAction?.href ?? ""]);
-    expect(all.some((h) => /settlements\/new|settlement.*(create|builder|wizard)/.test(h))).toBe(false);
+  // Phase D (web settlements, owner-approved 2026-10): the iPhone settlement
+  // model is the live payroll system on web, so "New settlement" now exists —
+  // as a carrier-admin action only, never a driver destination.
+  it("'New settlement' is a carrier-admin primary action on Settlements (Phase D)", () => {
+    const settlements = allNavItems().find((i) => i.href === "/settlements");
+    expect(settlements?.primaryAction).toEqual({ href: "/settlements/new", label: "New settlement", visibleTo: "carrier_admin" });
+    const others = allNavItems().filter((i) => i.href !== "/settlements").flatMap((i) => [i.href, i.primaryAction?.href ?? ""]);
+    expect(others.some((h) => /settlements\/new/.test(h))).toBe(false);
   });
 
   it("section ids are unique and hrefs are unique", () => {

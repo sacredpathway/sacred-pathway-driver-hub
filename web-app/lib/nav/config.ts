@@ -70,8 +70,11 @@ export const NAV_SECTIONS: ReadonlyArray<NavSection> = [
     id: "finance",
     label: "Finance",
     items: [
-      { href: "/settlements", label: "Settlements", icon: "settlements", visibleTo: "any" },
-      { href: "/payroll", label: "Payroll", icon: "payroll", visibleTo: "any" },
+      {
+        href: "/settlements", label: "Settlements", icon: "settlements", visibleTo: "any",
+        primaryAction: { href: "/settlements/new", label: "New settlement", visibleTo: "carrier_admin" },
+      },
+      { href: "/payroll", label: "Payroll History", icon: "payroll", visibleTo: "any" },
       {
         href: "/expenses", label: "Expenses", icon: "expenses", visibleTo: "any",
         primaryAction: { href: "/expenses/new", label: "Record expense", visibleTo: "any" },

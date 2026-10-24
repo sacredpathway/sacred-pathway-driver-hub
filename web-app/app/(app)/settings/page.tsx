@@ -53,6 +53,12 @@ export default async function SettingsPage() {
           >
             Paystub
           </Link>
+          <Link
+            href="/settings/payroll-categories"
+            className="rounded-md px-3 py-1.5 text-sp-textSecondary hover:bg-white/5 hover:text-sp-textPrimary"
+          >
+            Payroll categories
+          </Link>
         </nav>
       </header>
 

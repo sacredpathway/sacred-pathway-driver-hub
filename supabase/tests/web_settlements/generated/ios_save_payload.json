@@ -1,0 +1,158 @@
+{
+  "additions" : [
+    {
+      "amount" : 50,
+      "category" : "bonus",
+      "date" : "2026-09-13",
+      "description" : "Safety bonus",
+      "document_id" : "AAAAAAAA-0000-0000-0000-0000000D0C17",
+      "id" : "22222222-0000-4000-8000-000000002017",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "sort_order" : 17
+    }
+  ],
+  "audit" : [
+    {
+      "action" : "created",
+      "actor_name" : "Test Operator",
+      "actor_user_id" : "22222222-0000-4000-8000-000000009001",
+      "id" : "C1C9B04D-5F42-4803-A663-360BDF8B5A89",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "summary" : "Settlement created for Test Driver, Sep 6 – Sep 12, 2026 · SP-2026-0001",
+      "timestamp" : "2026-09-15T12:00:00.000Z"
+    },
+    {
+      "action" : "load_added",
+      "actor_name" : "Test Operator",
+      "actor_user_id" : "22222222-0000-4000-8000-000000009001",
+      "field_name" : "load",
+      "id" : "6393BB92-1BE6-42C7-BFBA-F5998FB7ACCC",
+      "new_value" : "TEST-17",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "summary" : "Load TEST-17 added · gross $2,345.67 · driver $645.06",
+      "timestamp" : "2026-09-15T12:00:00.000Z"
+    },
+    {
+      "action" : "advance_repayment_applied",
+      "actor_name" : "Test Operator",
+      "actor_user_id" : "22222222-0000-4000-8000-000000009001",
+      "field_name" : "advance_balance",
+      "id" : "22ED0017-80C4-4A2C-AD18-CE60DDA19C89",
+      "new_value" : "$800.00",
+      "previous_value" : "$1,000.00",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "summary" : "Advance recovery $200.00 applied · balance $1,000.00 → $800.00",
+      "timestamp" : "2026-09-15T12:00:00.000Z"
+    }
+  ],
+  "deductions" : [
+    {
+      "amount" : 33,
+      "category" : "equipment_charge",
+      "custom_category_id" : "AAAAAAAA-0000-0000-0000-0000000CC017",
+      "date" : "2026-09-13",
+      "description" : "ELD subscription",
+      "driver_share_percent" : 100,
+      "id" : "22222222-0000-4000-8000-000000003018",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "responsibility" : "driver",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "sort_order" : 18
+    },
+    {
+      "advance_id" : "AAAAAAAA-0000-0000-0000-0000000AD017",
+      "amount" : 200,
+      "category" : "cash_advance",
+      "date" : "2026-09-13",
+      "description" : "Test Cash Advance 17",
+      "driver_share_percent" : 100,
+      "id" : "5E0A5C92-5C10-4C4C-BD95-59FEFB1CC3F0",
+      "notes" : "Balance after this settlement: $800.00",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "responsibility" : "driver",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "sort_order" : 8000
+    }
+  ],
+  "expected_updated_at" : null,
+  "header" : {
+    "company_expenses" : 0,
+    "company_retained" : 1883.61,
+    "created_at" : "2026-09-15T12:00:00.000Z",
+    "created_by" : "22222222-0000-4000-8000-000000009001",
+    "deadhead_miles" : 0,
+    "driver_id" : "AAAAAAAA-0000-0000-0000-00000000D001",
+    "driver_pay_amount" : 645.0600000000001,
+    "driver_pay_percentage" : 27.5,
+    "engine_version" : "settlement-engine\/1.0",
+    "gross_load_revenue" : 2345.67,
+    "gross_profit" : 2345.67,
+    "hours_worked" : null,
+    "id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+    "is_estimate" : false,
+    "loaded_miles" : 500,
+    "net_pay" : 462.06000000000006,
+    "notes" : null,
+    "pay_on_gross_revenue" : true,
+    "pay_rule" : {
+      "components" : [
+        {
+          "id" : "654D2C3B-04BB-48E5-8F68-5E2E5E2786B0",
+          "kind" : "percent_of_gross",
+          "label" : "Percentage of Gross",
+          "mile_basis" : "loaded",
+          "percent" : 27.5
+        }
+      ]
+    },
+    "profile_id" : "11111111-0000-4000-8000-000000000001",
+    "settlement_number" : "IOS-2026-0017",
+    "settlement_period_end" : "2026-09-13",
+    "settlement_period_start" : "2026-09-07",
+    "settlement_type" : "company_driver",
+    "status" : "draft",
+    "total_additions" : 50,
+    "total_deductions" : 233,
+    "total_driver_earnings" : 645.06,
+    "total_expenses" : 0,
+    "total_miles" : 500,
+    "total_revenue" : 2345.67,
+    "truck_id" : null,
+    "truck_number" : "TEST-UNIT-1",
+    "updated_at" : "2026-09-15T12:00:00.000Z"
+  },
+  "loads" : [
+    {
+      "accessorials" : 0,
+      "broker_mc_number" : "000000",
+      "broker_name" : "Test Broker",
+      "deadhead_miles" : 0,
+      "delivery_date" : "2026-09-09",
+      "destination" : "Test Destination, TS",
+      "detention" : 0,
+      "driver_earnings" : 645.06,
+      "fuel_surcharge" : 0,
+      "id" : "1FE5ADB2-6689-45F9-9442-76074AB67B11",
+      "is_adjustment" : false,
+      "layover" : 0,
+      "linehaul" : 2345.67,
+      "load_id" : "AAAAAAAA-0000-0000-0000-0000000A0017",
+      "load_number" : "TEST-17",
+      "loaded_miles" : 500,
+      "lumper_reimbursement" : 0,
+      "origin" : "Test Origin, TS",
+      "pay_basis_description" : "27.5% of $2,345.67",
+      "pickup_date" : "2026-09-08",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "sort_order" : 0,
+      "tonu" : 0
+    }
+  ],
+  "mode" : "create",
+  "settlement_id" : "c18f8def-4c09-41e7-8f57-308b67d3ce43"
+}

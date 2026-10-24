@@ -20,6 +20,7 @@ import PaystubEditor from "./PaystubEditor";
 import ConfirmButton from "./ConfirmButton";
 import EditHeaderForm from "./EditHeaderForm";
 import GustoLinkButton from "@/components/GustoLinkButton";
+import { LEGACY_PAYSTUBS_READ_ONLY } from "@/lib/payroll/legacy";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { isCancelledStatus } from "@/lib/loads/status";
 import type {
@@ -68,7 +69,8 @@ export default async function PaystubDetailPage({
     .maybeSingle();
   const driver = driverRaw as Driver | null;
 
-  const editable = paystub.status === "draft";
+  // Legacy paystubs are read-only history (lib/payroll/legacy.ts).
+  const editable = !LEGACY_PAYSTUBS_READ_ONLY && (paystub.status === "draft");
 
   // Eligible loads for "Add load to draft" — only fetched in the edit case to
   // keep the read-only view minimal. Filter: this driver's loads in the
@@ -162,15 +164,23 @@ export default async function PaystubDetailPage({
             Print preview
           </Link>
           <Link href="/payroll" className="text-xs text-sp-textSecondary hover:text-sp-textPrimary">
-            ← All paystubs
+            ← Payroll history
           </Link>
         </div>
       </header>
 
       {sp.created && (
         <div className="rounded-md border border-sp-success/40 bg-sp-success/10 px-3 py-2 text-sm text-sp-success">
-          Draft created. Add line items below, then click Issue.
+          Draft created.
         </div>
+      )}
+
+      {LEGACY_PAYSTUBS_READ_ONLY && (
+        <LockedBanner
+          tone="info"
+          title="Legacy paystub — read-only history."
+          body="Web paystubs were retired as an active payroll system. This record is kept exactly as it was. Pay drivers through Settlements — the same settlements the iPhone app uses."
+        />
       )}
 
       {/* Locked-state banners — visible whenever the paystub isn't a draft. */}
@@ -223,7 +233,8 @@ export default async function PaystubDetailPage({
       {/* External-link card — Carrier HQ prepares records, Gusto runs payroll. */}
       <GustoLinkButton />
 
-      {/* Lifecycle controls */}
+      {/* Lifecycle controls — hidden while legacy paystubs are read-only. */}
+      {!LEGACY_PAYSTUBS_READ_ONLY && (
       <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
         <h2 className="text-base font-semibold text-sp-textPrimary">Lifecycle</h2>
         <p className="mt-1 text-xs text-sp-textSecondary">
@@ -283,6 +294,7 @@ export default async function PaystubDetailPage({
           )}
         </div>
       </section>
+      )}
     </section>
   );
 }
