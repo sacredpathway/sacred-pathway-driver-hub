@@ -1,0 +1,97 @@
+{
+  "mode": "create",
+  "settlement_id": "5e000000-0000-4000-8000-000000049155",
+  "expected_updated_at": null,
+  "header": {
+    "driver_id": "aaaaaaaa-0000-0000-0000-00000000d001",
+    "settlement_period_start": "2026-10-12",
+    "settlement_period_end": "2026-10-18",
+    "settlement_number": "SP-2026-0001",
+    "settlement_type": "company_driver",
+    "truck_number": null,
+    "pay_rule": {
+      "components": [
+        {
+          "id": "5E000000-0000-4000-8000-000000049154",
+          "kind": "percent_of_gross",
+          "label": "Percentage of Gross",
+          "mile_basis": "loaded",
+          "percent": 70
+        }
+      ]
+    },
+    "pay_on_gross_revenue": true,
+    "hours_worked": null,
+    "notes": null,
+    "is_estimate": false,
+    "gross_load_revenue": "1850.00",
+    "total_driver_earnings": "1295.00",
+    "total_additions": "0.00",
+    "total_deductions": "0.00",
+    "company_retained": "555.00",
+    "company_expenses": "0.00",
+    "loaded_miles": "240.00",
+    "deadhead_miles": "0.00",
+    "total_miles": "240.00",
+    "total_revenue": "1850.00",
+    "total_expenses": "0.00",
+    "gross_profit": "1850.00",
+    "driver_pay_amount": "1295.00",
+    "net_pay": "1295.00",
+    "engine_version": "settlement-engine/1.0",
+    "driver_pay_percentage": "70"
+  },
+  "loads": [
+    {
+      "id": "5e000000-0000-4000-8000-000000049156",
+      "settlement_id": "5e000000-0000-4000-8000-000000049155",
+      "profile_id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "load_id": "aaaaaaaa-0000-0000-0000-0000000a3001",
+      "load_number": "SYN-30001",
+      "broker_name": "Example Brokerage Inc",
+      "broker_mc_number": "800123",
+      "pickup_date": "2026-10-13",
+      "delivery_date": "2026-10-14",
+      "origin": "Dallas, TX",
+      "destination": "Houston, TX",
+      "loaded_miles": "240.00",
+      "deadhead_miles": "0.00",
+      "linehaul": "1850.00",
+      "fuel_surcharge": "0.00",
+      "accessorials": "0.00",
+      "detention": "0.00",
+      "layover": "0.00",
+      "tonu": "0.00",
+      "lumper_reimbursement": "0.00",
+      "gross_rate_override": null,
+      "pay_rule_override": null,
+      "hours_worked": null,
+      "driver_earnings": "1295.00",
+      "pay_basis_description": "70% of $1,850.00",
+      "notes": null,
+      "is_adjustment": false,
+      "corrects_settlement_id": null,
+      "sort_order": 0
+    }
+  ],
+  "additions": [],
+  "deductions": [],
+  "audit": [
+    {
+      "action": "created",
+      "summary": "Settlement created for Driver A1, Oct 12 – Oct 18, 2026 · SP-2026-0001",
+      "field_name": null,
+      "previous_value": null,
+      "new_value": null,
+      "actor_name": "owner@example.com"
+    },
+    {
+      "action": "load_added",
+      "summary": "Load SYN-30001 added · gross $1,850.00 · driver $1,295.00",
+      "field_name": "load",
+      "previous_value": null,
+      "new_value": "SYN-30001",
+      "actor_name": "owner@example.com"
+    }
+  ]
+}

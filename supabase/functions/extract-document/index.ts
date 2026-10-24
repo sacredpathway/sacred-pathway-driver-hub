@@ -40,6 +40,11 @@ import {
   V2_MAX_PDF_PAGES,
 } from "../_shared/document-extraction.ts";
 import { routableDocumentType } from "../_shared/document-taxonomy.ts";
+import {
+  PAYROLL_EXTRACTION_VERSION,
+  sanitizePayrollExtraction,
+  SYSTEM_PROMPT_V3,
+} from "../_shared/payroll-extraction.ts";
 
 // ---------- Config ----------
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
@@ -262,8 +267,16 @@ Deno.serve(withCors(async (req) => {
 
     // ---- v2 (web app, opt-in). The iPhone never sends extraction_version,
     // so everything below this branch is the unchanged v1 contract.
-    if (body.extraction_version === EXTRACTION_VERSION) {
+    // ---- v3 = payroll profile (Smart Payroll Upload, opt-in). Same pipeline
+    // as v2 with a different prompt + sanitiser; v1 and v2 are unchanged.
+    if (
+      body.extraction_version === EXTRACTION_VERSION ||
+      body.extraction_version === PAYROLL_EXTRACTION_VERSION
+    ) {
       return await runV2(traceId, t0, docRow, {
+        profile: body.extraction_version === PAYROLL_EXTRACTION_VERSION
+          ? "v3"
+          : "v2",
         typeHint: typeof body.type_hint === "string" ? body.type_hint : null,
         // persist:false = dry-run preview (pending-document backfill plan):
         // extract and return, write NOTHING to the database.
@@ -704,6 +717,8 @@ const RAW_TEXT_MAX = 20_000;
 interface V2Options {
   typeHint: string | null;
   persist: boolean;
+  /** "v3" = payroll profile. Defaults to v2 behaviour. */
+  profile?: "v2" | "v3";
 }
 
 interface V2DocRow {
@@ -794,7 +809,9 @@ async function runV2(
   let raw: string;
   let modelUsed: string;
   try {
-    const result = await callOpenAIV2(openaiKey, content);
+    const result = opts.profile === "v3"
+      ? await callOpenAIV2(openaiKey, content, SYSTEM_PROMPT_V3, 4096)
+      : await callOpenAIV2(openaiKey, content);
     raw = stripJsonFences(result.content);
     modelUsed = result.model;
   } catch (err) {
@@ -822,6 +839,18 @@ async function runV2(
   }
 
   // Untrusted model output -> whitelisted, validated fields only.
+  if (opts.profile === "v3") {
+    return await finishV3(traceId, t0, adminClient, docRow, opts, {
+      parsed: parseStage === "fallback" ? {} : parsed,
+      parseStage,
+      hint,
+      raw,
+      modelUsed,
+      mime: check.mime,
+      size: bytes.length,
+      fail,
+    });
+  }
   const sanitized = sanitizeExtraction(parseStage === "fallback" ? {} : parsed);
   const extracted = {
     ...sanitized,
@@ -884,6 +913,8 @@ async function runV2(
 async function callOpenAIV2(
   apiKey: string,
   content: OpenAIContentPart[],
+  systemPrompt: string = SYSTEM_PROMPT_V2,
+  maxTokens = 2048,
 ): Promise<{ content: string; model: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
@@ -897,10 +928,10 @@ async function callOpenAIV2(
       body: JSON.stringify({
         model: DEFAULT_MODEL,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT_V2 },
+          { role: "system", content: systemPrompt },
           { role: "user", content },
         ],
-        max_tokens: 2048,
+        max_tokens: maxTokens,
         temperature: 0,
         response_format: { type: "json_object" },
       }),
@@ -924,4 +955,79 @@ async function callOpenAIV2(
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ============================================================================
+// v3 — payroll profile (Smart Payroll Upload). Extraction ONLY: like v2 it
+// never creates loads, settlements, lines or links. Writes only the
+// document row's extraction columns (when persist is true).
+// ============================================================================
+
+async function finishV3(
+  traceId: string,
+  t0: number,
+  adminClient: any,
+  docRow: V2DocRow,
+  opts: V2Options,
+  r: {
+    parsed: unknown;
+    parseStage: "strict" | "salvage" | "fallback";
+    hint: string | null;
+    raw: string;
+    modelUsed: string;
+    mime: string;
+    size: number;
+    fail: (code: ErrorCode, stage: string, detail: string) => Promise<Response>;
+  },
+): Promise<Response> {
+  const sanitized = sanitizePayrollExtraction(r.parsed);
+  const extracted = {
+    ...sanitized,
+    parse_stage: r.parseStage,
+    type_hint: r.hint,
+    // A failed parse is never high confidence, whatever the model claimed.
+    model_confidence: r.parseStage === "fallback"
+      ? null
+      : sanitized.model_confidence,
+  };
+  if (opts.persist) {
+    const { error: updateErr } = await adminClient
+      .from("documents")
+      .update({
+        status: "processed",
+        processed: true,
+        extracted_data: extracted,
+        raw_text: r.raw.slice(0, RAW_TEXT_MAX),
+        confidence: extracted.model_confidence ?? "low",
+        document_type: sanitized.stored_document_type,
+        provider: "openai",
+        model: r.modelUsed,
+        file_mime_type: r.mime,
+        file_size: r.size,
+        extraction_version: PAYROLL_EXTRACTION_VERSION,
+        retry_count: (docRow.retry_count ?? 0) +
+          (docRow.status === "failed" ? 1 : 0),
+        error_message: null,
+      })
+      .eq("id", docRow.id);
+    if (updateErr) {
+      return await r.fail("UNKNOWN_SCAN_ERROR", "v3_db_update", updateErr.message);
+    }
+  }
+  log(traceId, "v3_done", {
+    parseStage: r.parseStage,
+    type: extracted.document_type,
+    lines: extracted.line_items.length,
+    persist: opts.persist,
+    elapsed: Date.now() - t0,
+  });
+  return jsonResponse({
+    success: true,
+    document_id: docRow.id,
+    status: "processed",
+    extraction_version: PAYROLL_EXTRACTION_VERSION,
+    persisted: opts.persist,
+    extracted,
+    model: r.modelUsed,
+  });
 }
