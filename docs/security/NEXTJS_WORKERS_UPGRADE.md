@@ -384,3 +384,34 @@ managed through wrangler.toml"), so the binding is supplied by the proxy's `wran
    magic-link sign-in on production.
 3. Rollback: Pages → Deployments → `cfd0b541` → Rollback to this deployment (instant). Worker rollback, if
    ever needed: `wrangler rollback 12abe18b` (would reintroduce the session bug).
+
+## Next.js 16.4.3 upgrade (2026-10-23) — local only, not deployed
+
+OpenNext Cloudflare 1.20.13 requires Next ≥ 16.4.1, so the Next 15.5.26 build could only run with an unsupported-version override. Owner-approved Option B upgrades instead.
+
+| Package | Before | After |
+|---|---|---|
+| `next` | 15.5.26 | 16.4.3 |
+| `@opennextjs/cloudflare` | 1.20.7 | 1.20.13 |
+| `wrangler` | 4.145.0 | 4.152.0 |
+| `eslint` / `eslint-config-next` | ^8.57.1 / 15.5.26 | ^9.39.1 / 16.4.3 |
+| `react`, `react-dom` | ^18.3.1 | unchanged |
+
+- `next lint` was removed in Next 16. `npm run lint` is now `eslint .` with `eslint.config.mjs` (flat config); `.eslintrc.json` is deleted.
+- `tsconfig.json` and `next-env.d.ts` were rewritten by Next 16 itself (`"jsx": "react-jsx"`, `.next/dev/types` include).
+- No app source changed. The Cloudflare build runs with no version override.
+- Next 16 warns that React 18 is deprecated (removal in Next 17) and that `middleware.ts` should become `proxy.ts`. Both still work; both are separate follow-ups.
+
+### Lint follow-up (owner-approved: two new rules at warning level)
+
+`eslint-config-next` 16 ships `eslint-plugin-react-hooks` 7, whose new rules `react-hooks/set-state-in-effect` and `react-hooks/use-memo` flag 5 existing call sites. They are set to `warn` in `eslint.config.mjs` so the gate stays where it was under Next 15. Fix these, then remove the two overrides:
+
+| File | Line | Rule |
+|---|---|---|
+| `web-app/app/(app)/documents/UploadCard.tsx` | 56 | `react-hooks/set-state-in-effect` |
+| `web-app/app/(app)/payroll/[id]/EditHeaderForm.tsx` | 53 | `react-hooks/set-state-in-effect` |
+| `web-app/app/(app)/settlements/new/NewSettlementForm.tsx` | 27 | `react-hooks/use-memo` |
+| `web-app/app/(app)/settlements/new/NewSettlementForm.tsx` | 42 | `react-hooks/set-state-in-effect` |
+| `web-app/components/shell/Sidebar.tsx` | 30 | `react-hooks/set-state-in-effect` |
+
+The other 2 lint warnings predate the upgrade: `settings/LogoCard.tsx:41` (unused `eslint-disable`) and `:43` (`@next/next/no-img-element`).
