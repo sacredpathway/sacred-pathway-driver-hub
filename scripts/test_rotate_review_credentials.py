@@ -10,7 +10,7 @@ shell history, temp files, and exactly what the mock server received.
 
 Run:  python3 scripts/test_rotate_review_credentials.py
 """
-import base64, http.server, json, os, pty, re, select, shutil, subprocess, sys, tempfile, threading, time
+import base64, http.server, json, os, pty, re, select, shutil, socket, subprocess, sys, tempfile, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.environ.get("SCRIPT_UNDER_TEST") or os.path.join(HERE, "rotate_review_credentials.sh")
@@ -37,6 +37,8 @@ class Mock(http.server.BaseHTTPRequestHandler):
     def _rec(self, body=b""):
         Mock.log.append({"method": self.command, "path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": body.decode("utf-8", "replace")})
     def do_GET(self):
+        if self.path == "/auth/v1/health":
+            return self._send(401, {"message": "No API key found in request"})
         self._rec()
         if self.path.endswith(UID):
             self._send(200, {"id": UID, "email": EMAIL, "updated_at": "2026-10-23T04:51:58Z"})
@@ -87,11 +89,12 @@ def sample(stop, found, secrets, root):
         time.sleep(0.02)
 
 # ------------------------------------------------------------- runner
-def run(args, answers, env_extra=None, interrupt_at=None, shell_history=False):
+def run(args, answers, env_extra=None, interrupt_at=None, shell_history=False, url=None):
     tmpdir = tempfile.mkdtemp(prefix="rot-test-")
     hist = os.path.join(tmpdir, "bash_history")
+    log = os.path.join(tmpdir, "rotation-status.log")
     env = {"PATH": os.environ["PATH"], "HOME": tmpdir, "TMPDIR": os.path.join(tmpdir, "t"), "LANG": "C.UTF-8",
-           "ROTATE_TEST_URL": URL, "HISTFILE": hist, "TERM": "xterm"}
+           "ROTATE_TEST_URL": url or URL, "HISTFILE": hist, "TERM": "xterm", "ROTATE_STATUS_LOG": log}
     os.makedirs(env["TMPDIR"])
     env.update(env_extra or {})
     Mock.log.clear()
@@ -136,10 +139,12 @@ def run(args, answers, env_extra=None, interrupt_at=None, shell_history=False):
     stop.set(); th.join()
     leftovers = [os.path.join(d, f) for d, _, fs in os.walk(env["TMPDIR"]) for f in fs] + [d for d, ds, _ in os.walk(env["TMPDIR"]) if d != env["TMPDIR"]]
     history = open(hist).read() if os.path.exists(hist) else ""
+    status_log = open(log, encoding="utf-8", errors="replace").read() if os.path.exists(log) else ""
     shutil.rmtree(tmpdir)
     text = out.decode("utf-8", "replace")
     leaks = [n for n, s in secrets.items() if s in text or s in history]
-    return {"out": text, "requests": list(Mock.log), "argv_env": sorted(found), "leftovers": leftovers, "leaks": leaks, "history": history}
+    log_leaks = [n for n, s in secrets.items() if s in status_log]
+    return {"out": text, "requests": list(Mock.log), "argv_env": sorted(found), "leftovers": leftovers, "leaks": leaks, "history": history, "log": status_log, "log_leaks": log_leaks}
 
 results = []
 def check(name, cond, detail=""):
@@ -149,6 +154,7 @@ def common(name, r):
     check(f"{name}: no secret in terminal output or shell history", not r["leaks"], r["leaks"])
     check(f"{name}: no secret in any process argv/env", not r["argv_env"], r["argv_env"])
     check(f"{name}: temp files removed", not r["leftovers"], r["leftovers"])
+    check(f"{name}: status log written, no secrets in it", bool(r["log"]) and not r["log_leaks"] and " END " in r["log"], (r["log_leaks"], r["log"][-300:]))
 puts = lambda r: [q for q in r["requests"] if q["method"] == "PUT"]
 
 # 1. rotate with a legacy service-role JWT; tricky password; history from an interactive shell
@@ -161,6 +167,7 @@ check("rotate: legacy key sent as apikey + Bearer", bool(p) and p[0]["headers"].
 check("rotate: correct endpoint", bool(p) and p[0]["path"] == f"/auth/v1/admin/users/{UID}")
 check("rotate: shell history holds only the command line", r["history"].strip().splitlines()[:1] == [f"bash {SCRIPT} rotate {UID} {EMAIL}"] and "history -a" in r["history"], r["history"])
 check("rotate: prints HTTP 200 + non-secret fields", "HTTP 200" in r["out"] and "updated_at" in r["out"])
+check("rotate: status log shows every stage ending in done", all(s in r["log"] for s in ("START", "DEPS", "NET", "KEY", "LOOKUP", "IDENTITY", "BODY", "WRITE")) and "rc=0 stage=done" in r["log"], r["log"])
 
 # 2. new-style secret key -> apikey header only
 r = run(["rotate", UID, EMAIL], [SECRET_KEY, EMAIL, PASSWORD, PASSWORD]); common("sb_secret key", r)
@@ -202,6 +209,11 @@ check("enable: body is ban_duration none", bool(puts(r)) and json.loads(puts(r)[
 # 10. Ctrl-C at the password prompt -> no PUT, temp files gone
 r = run(["rotate", UID, EMAIL], [SERVICE_KEY, EMAIL, PASSWORD], interrupt_at="New password"); common("ctrl-c", r)
 check("Ctrl-C: no PUT", not puts(r))
+
+# 10b. Supabase unreachable -> stops before any prompt, says why, logs stage=connectivity
+dead = socket.socket(); dead.bind(("127.0.0.1", 0)); dead_port = dead.getsockname()[1]; dead.close()
+r = run(["rotate", UID, EMAIL], [SERVICE_KEY], url=f"http://127.0.0.1:{dead_port}"); common("unreachable", r)
+check("unreachable: no prompt, no request, clear message, logged", "Cannot reach Supabase" in r["out"] and "key" not in r["out"].split("Cannot reach")[0].lower() and not r["requests"] and "stage=connectivity" in r["log"], (r["out"][-200:], r["log"][-200:]))
 
 # 11. URL override cannot point anywhere but localhost
 out = subprocess.run(["bash", SCRIPT, "rotate", UID, EMAIL], env={"PATH": os.environ["PATH"], "ROTATE_TEST_URL": "https://evil.example.com"}, capture_output=True, text=True, stdin=subprocess.DEVNULL)

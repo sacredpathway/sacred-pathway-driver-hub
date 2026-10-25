@@ -12,6 +12,11 @@
 #    * output is the HTTP status and non-secret fields (id, email, updated_at,
 #      banned_until, error code/message) only.
 #
+#  Diagnostics: every run appends a status log WITHOUT secrets (stage names,
+#  HTTP codes, bash/curl/OS versions, account id/email) to rotation-status.log
+#  next to this script (override: ROTATE_STATUS_LOG). Connectivity to Supabase
+#  is checked before any prompt.
+#
 #  Safety: before anything is written the script reads the account by id and
 #  refuses unless its email equals the email you pass, then asks you to type
 #  the email again.
@@ -43,18 +48,37 @@ case "$ACTION" in rotate|disable|enable) ;; *) usage ;; esac
 [[ "$USER_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || { echo "user id must be a lower-case UUID" >&2; exit 2; }
 [[ "$EXPECTED_EMAIL" == *@* ]] || usage
 
-# Dependencies first, before any prompt (macOS: python3 needs the Command Line Tools).
-command -v curl >/dev/null 2>&1 || { echo "curl not found" >&2; exit 2; }
-python3 -c 'pass' >/dev/null 2>&1 || { echo "python3 not available (macOS: xcode-select --install)" >&2; exit 2; }
-
+# ---- status log (no secrets) and cleanup --------------------------------------
+LOG="${ROTATE_STATUS_LOG:-$(cd "$(dirname "$0")" && pwd)/rotation-status.log}"
+STAGE="start"
+status() { printf '%s %-12s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" >> "$LOG" 2>/dev/null || true; }
 TMP="$(mktemp -d)"
-cleanup() { rm -rf "$TMP"; }
-trap cleanup EXIT
-trap 'cleanup; trap - EXIT; exit 130' INT TERM HUP
+finish() { rc=$?; rm -rf "$TMP"; status END "rc=$rc stage=$STAGE"; }
+trap finish EXIT
+trap 'STAGE="$STAGE(interrupted)"; exit 130' INT TERM HUP
+status START "action=$ACTION user=$USER_ID expected=$EXPECTED_EMAIL bash=${BASH_VERSION} os=$(uname -sr 2>/dev/null)"
+
+# ---- dependencies, before any prompt (macOS: python3 needs the Command Line Tools)
+STAGE="deps"
+command -v curl >/dev/null 2>&1 || { status FAIL "curl not found"; echo "curl not found" >&2; exit 2; }
+status DEPS "$(curl --version 2>/dev/null | head -1 | cut -c1-80)"
+python3 -c 'pass' >/dev/null 2>&1 || { status FAIL "python3 not available"; echo "python3 not available (macOS: run: xcode-select --install)" >&2; exit 2; }
+status DEPS "$(python3 -V 2>&1)"
+
+# ---- connectivity, before any prompt ------------------------------------------
+STAGE="connectivity"
+net_code=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' "$PROJECT_URL/auth/v1/health" 2>"$TMP/neterr" || true)
+status NET "GET /auth/v1/health -> HTTP ${net_code:-none} $(tr '\n' ' ' < "$TMP/neterr" | cut -c1-160)"
+case "$net_code" in
+  200|401) ;;
+  *) echo "Cannot reach Supabase (HTTP ${net_code:-none}): $(tr '\n' ' ' < "$TMP/neterr")" >&2
+     echo "Check your internet/VPN, then run the same command again. Nothing was sent." >&2; exit 3 ;;
+esac
 
 # ---- service-role key --------------------------------------------------------
+STAGE="key"
 IFS= read -r -s -p "Production service-role key (Dashboard → Project Settings → API Keys): " KEY; echo
-[ -n "$KEY" ] || { echo "no key entered" >&2; exit 1; }
+[ -n "$KEY" ] || { status FAIL "no key entered"; echo "no key entered" >&2; exit 1; }
 # Classify the key without printing it: legacy JWT must carry role=service_role;
 # new keys must be sb_secret_….
 KIND="$(printf '%s' "$KEY" | python3 -c '
@@ -70,6 +94,7 @@ try:
 except Exception:
     print("unknown")
 ')"
+status KEY "kind=$KIND"
 case "$KIND" in
   secret)       printf 'apikey: %s\nContent-Type: application/json\n' "$KEY" > "$TMP/headers" ;;
   service_role) printf 'apikey: %s\nAuthorization: Bearer %s\nContent-Type: application/json\n' "$KEY" "$KEY" > "$TMP/headers" ;;
@@ -90,39 +115,51 @@ PY
 }
 
 # ---- 1. read-only identity check --------------------------------------------
-code=$(curl -sS -o "$TMP/user.json" -w '%{http_code}' -H @"$TMP/headers" "$PROJECT_URL/auth/v1/admin/users/$USER_ID")
-if [ "$code" != "200" ]; then echo "lookup failed: HTTP $code"; fields "$TMP/user.json"; exit 1; fi
+STAGE="lookup"
+code=$(curl -sS -o "$TMP/user.json" -w '%{http_code}' -H @"$TMP/headers" "$PROJECT_URL/auth/v1/admin/users/$USER_ID" 2>"$TMP/neterr" || true)
+status LOOKUP "HTTP ${code:-none} $(fields "$TMP/user.json" 2>/dev/null | cut -c1-200) $(tr '\n' ' ' < "$TMP/neterr" | cut -c1-120)"
+if [ "$code" != "200" ]; then echo "lookup failed: HTTP ${code:-none} $(tr '\n' ' ' < "$TMP/neterr")"; fields "$TMP/user.json"; exit 1; fi
 ACTUAL_EMAIL="$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("email") or "").lower())' "$TMP/user.json")"
 EXP_LC="$(printf '%s' "$EXPECTED_EMAIL" | tr '[:upper:]' '[:lower:]')"
+STAGE="identity"
 if [ "$ACTUAL_EMAIL" != "$EXP_LC" ]; then
+  status FAIL "identity mismatch: account email <$ACTUAL_EMAIL>"
   echo "REFUSED: account $USER_ID belongs to <$ACTUAL_EMAIL>, not <$EXP_LC>. Nothing changed." >&2; exit 1
 fi
 echo "Target: $USER_ID <$ACTUAL_EMAIL>  action: $ACTION"
+status IDENTITY "match <$ACTUAL_EMAIL>"
+STAGE="confirm"
 IFS= read -r -p "Type the email again to confirm: " CONFIRM
-[ "$(printf '%s' "$CONFIRM" | tr '[:upper:]' '[:lower:]')" = "$ACTUAL_EMAIL" ] || { echo "not confirmed; nothing changed" >&2; exit 1; }
+[ "$(printf '%s' "$CONFIRM" | tr '[:upper:]' '[:lower:]')" = "$ACTUAL_EMAIL" ] || { status FAIL "confirmation did not match"; echo "not confirmed; nothing changed" >&2; exit 1; }
+STAGE="body"
 
 # ---- 2. request body ---------------------------------------------------------
 case "$ACTION" in
   rotate)
     IFS= read -r -s -p "New password (from your password manager, 16+ chars): " PW; echo
     IFS= read -r -s -p "Repeat new password: " PW2; echo
-    [ "$PW" = "$PW2" ] || { unset PW PW2; echo "passwords differ; nothing changed" >&2; exit 1; }
-    [ "${#PW}" -ge 16 ] || { unset PW PW2; echo "use 16+ characters; nothing changed" >&2; exit 1; }
+    [ "$PW" = "$PW2" ] || { unset PW PW2; status FAIL "passwords differ"; echo "passwords differ; nothing changed" >&2; exit 1; }
+    [ "${#PW}" -ge 16 ] || { unset PW PW2; status FAIL "password shorter than 16"; echo "use 16+ characters; nothing changed" >&2; exit 1; }
     printf '%s' "$PW" | python3 -c 'import json,sys; sys.stdout.write(json.dumps({"password": sys.stdin.read()}))' > "$TMP/body.json"
     unset PW PW2 ;;
   disable) printf '{"ban_duration":"876000h"}' > "$TMP/body.json" ;;
   enable)  printf '{"ban_duration":"none"}'    > "$TMP/body.json" ;;
 esac
 
+status BODY "keys=$(python3 -c 'import json,sys; print(sorted(json.load(open(sys.argv[1]))))' "$TMP/body.json")"
 if [ -n "${DRY_RUN:-}" ]; then
+  STAGE="dry-run"
   echo "DRY RUN: would PUT $PROJECT_URL/auth/v1/admin/users/$USER_ID  body keys: $(python3 -c 'import json,sys; print(sorted(json.load(open(sys.argv[1]))))' "$TMP/body.json"). Nothing sent."
   exit 0
 fi
 
 # ---- 3. write ---------------------------------------------------------------
+STAGE="write"
 code=$(curl -sS -o "$TMP/resp.json" -w '%{http_code}' -X PUT -H @"$TMP/headers" \
-  --data-binary @"$TMP/body.json" "$PROJECT_URL/auth/v1/admin/users/$USER_ID")
-echo "HTTP $code"
+  --data-binary @"$TMP/body.json" "$PROJECT_URL/auth/v1/admin/users/$USER_ID" 2>"$TMP/neterr" || true)
+status WRITE "HTTP ${code:-none} $(fields "$TMP/resp.json" 2>/dev/null | cut -c1-200) $(tr '\n' ' ' < "$TMP/neterr" | cut -c1-120)"
+echo "HTTP ${code:-none}"
 fields "$TMP/resp.json"
 [ "$code" = "200" ] || exit 1
+STAGE="done"
 echo "Done. Next: update the same password in App Store Connect if this account is a review sign-in, then clear your clipboard."
