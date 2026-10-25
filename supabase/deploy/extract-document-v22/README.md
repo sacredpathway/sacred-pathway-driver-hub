@@ -31,11 +31,14 @@ byte-identical to commit `3638672`. So **rollback = redeploy `3638672`'s files.*
 
 ## Deploy (owner-run, after approval) — staging first
 
+Staging can be deployed **without** an OpenAI key first: v22 checks auth, document ownership and the storage
+download before it reads `OPENAI_API_KEY`, so those paths can be accepted at zero cost (see the release checklist, Step 6a).
+
 ```bash
 cd supabase/functions
 sha256sum -c ../deploy/extract-document-v22/MANIFEST.v22.sha256
-# staging (aatkirzwuuegurdlmcpl) needs its own OPENAI_API_KEY secret first:
-supabase secrets set --project-ref aatkirzwuuegurdlmcpl OPENAI_API_KEY=<staging key>
+# (optional, only for the paid live test) staging key:
+# supabase secrets set --project-ref aatkirzwuuegurdlmcpl OPENAI_API_KEY=<staging key>
 supabase functions deploy extract-document --project-ref aatkirzwuuegurdlmcpl --no-verify-jwt
 ```
 
