@@ -97,6 +97,31 @@ export function makeAutoDeps(supabase: SupabaseClient, o: AutoWireOptions): Auto
       return paySettingsForDriver(d as never, legacyPayOnGross((p ?? null) as never));
     },
 
+    async driverPeriod(driverId) {
+      const [{ data: d }, { data: ss }] = await Promise.all([
+        supabase.from("drivers").select("pay_frequency").eq("id", driverId).eq("profile_id", ownerId).maybeSingle(),
+        supabase.from("settlements").select("settlement_period_start, settlement_period_end, status, is_estimate")
+          .eq("driver_id", driverId).eq("profile_id", ownerId).order("settlement_period_end", { ascending: false }).limit(20),
+      ]);
+      return {
+        frequency: ((d as Row | null)?.pay_frequency as string | null) ?? null,
+        recent: ((ss ?? []) as Row[])
+          .filter((r) => r.status !== "voided" && r.is_estimate !== true && r.settlement_period_start && r.settlement_period_end)
+          .map((r) => ({ start: String(r.settlement_period_start).slice(0, 10), end: String(r.settlement_period_end).slice(0, 10) })),
+      };
+    },
+
+    async isEarliestUnlinkedCopy(documentId, sameIdentityIds) {
+      const ids = [documentId, ...sameIdentityIds.filter((x) => x !== documentId)].slice(0, 50);
+      const { data, error } = await supabase.from("documents").select("id, created_at, settlement_id, review_status, duplicate_of")
+        .in("id", ids).eq("profile_id", ownerId);
+      if (error) throw new Error(error.message);
+      const rows = ((data ?? []) as Row[]).filter((r) => r.review_status !== "dismissed" && !r.duplicate_of);
+      if (rows.some((r) => r.settlement_id)) return false;
+      const sorted = rows.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)));
+      return sorted[0]?.id === documentId;
+    },
+
     async loadDriver(loadId) {
       const { data } = await supabase.from("loads").select("driver_id").eq("id", loadId).eq("profile_id", ownerId).maybeSingle();
       return ((data as Row | null)?.driver_id as string | null) ?? null;

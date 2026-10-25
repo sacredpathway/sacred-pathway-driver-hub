@@ -43,3 +43,5 @@ insert into public.drivers (id, profile_id, name, pay_percentage, settlement_typ
 alter table public.loads
   add column if not exists truck_id   uuid,
   add column if not exists trailer_id uuid;
+alter table public.drivers
+  add column if not exists pay_frequency text;

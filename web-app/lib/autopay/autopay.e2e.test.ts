@@ -61,6 +61,12 @@ const MODEL = new Map<string, Record<string, unknown>>([
   ["rc-7007", RC("SPA-7007", 1300, { pickup_date: "2026-10-20", delivery_date: "2026-10-21" })],
   ["rc-8008", RC("SPA-8008", 1400, { pickup_date: "2026-10-20", delivery_date: "2026-10-22" })],
   ["toll-1001-late", RECEIPT("toll", "NTTA", 9.75, "SPA-1001")],
+  ["rc-11011-unknown-driver", RC("SPA-11011", 1100, { driver_name: "Marcus Reed", confidence: "medium" })],
+  ["rc-12012-scan-a", RC("SPA-12012", 1500, { driver_name: "Marcus Reed", pickup_date: "2026-10-06", delivery_date: "2026-10-07", notes: "scan a" })],
+  ["rc-12012-scan-b", RC("SPA-12012", 1500, { driver_name: "Marcus Reed", pickup_date: "2026-10-06", delivery_date: "2026-10-07", notes: "scan b" })],
+  ["rc-13013-other-carrier", RC("SPA-13013", 1300, { carrier_name: "Somebody Else Trucking", carrier_mc_number: "MC123987", driver_name: "Marcus Reed" })],
+  ["rc-14014-semimonthly", RC("SPA-14014", 1000, { driver_name: "Sam Okafor", pickup_date: "2026-10-19", delivery_date: "2026-10-20" })],
+  ["lumper-2002", RECEIPT("lumper_fee", "Capstone Lumper", 175, "SPA-2002", "2026-10-15")],
 ]);
 const FLAKY = new Set<string>(); // keys whose next extraction fails like a network error
 
@@ -251,25 +257,20 @@ describe.skipIf(!ENABLED)("automatic upload -> paystub (real Postgres, RLS, real
 
   let L2002 = "";
   let S2 = "";
-  it("5. out of order: POD + receipts BEFORE the rate con; new load created from the rate con -> everything joins ONE draft", async () => {
+  it("5. out of order: POD + receipts BEFORE a verified rate con for a NEW load -> load created automatically, everything joins ONE draft", async () => {
     as(C);
     const early = await uploadAndProcess("pod-2002", "fuel-2002", "toll-2002", "scale-2002");
     for (const r of early) expect(r.result).toMatchObject({ ok: true, state: "needs_review" }); // no load yet
     const [rc] = await uploadAndProcess("rc-2002");
-    expect(rc.result).toMatchObject({ ok: true, state: "needs_review" });
+    expect(rc.result).toMatchObject({ ok: true, state: "auto_routed" });
+    expect((rc.result as { payroll?: { state: string } }).payroll?.state).toBe("drafted");
     const d = await docRow(rc.id);
-    expect((d.routing as { proposed: { kind: string } }).proposed.kind).toBe("create_load"); // never automatic
-
-    // The owner presses "Create load" (values pre-filled from the document; driver pre-selected from the printed name).
-    const { createLoadFromDocumentAction } = await docs();
-    const fd = new FormData();
-    for (const [k, v] of Object.entries({ load_number: "SPA-2002", broker_name: "Blue Ridge Logistics", broker_mc_number: "500100", origin: "Tulsa, OK", destination: "Denver, CO",
-      pickup_date: "2026-10-14", delivery_date: "2026-10-15", total_miles: "680", line_haul_rate: "2400", fuel_surcharge: "0", accessorial_charges: "0", total_revenue: "2400", driver_id: TINA })) fd.append(k, v);
-    const created = await createLoadFromDocumentAction(rc.id, undefined, fd);
-    if (created && created.ok === false) throw new Error(`create load: ${created.message}`);
-    const [load] = await q<{ id: string; driver_id: string }>("select id, driver_id from public.loads where load_number = 'SPA-2002' and profile_id = $1", [C.id]);
-    L2002 = load.id;
-    expect(load.driver_id).toBe(TINA);
+    expect((d.routing as { applied: { kind: string; mode: string }[] }).applied.map((a) => [a.kind, a.mode])).toEqual([["create_load", "automatic"], ["attach_load", "automatic"]]);
+    const loads = await q<{ id: string; driver_id: string; total_revenue: string }>("select id, driver_id, total_revenue::text from public.loads where load_number = 'SPA-2002' and profile_id = $1", [C.id]);
+    expect(loads).toHaveLength(1);
+    L2002 = loads[0].id;
+    expect(loads[0].driver_id).toBe(TINA); // from the printed, uniquely matched driver
+    expect(loads[0].total_revenue).toBe("2400.00");
     for (const r of early) expect((await docRow(r.id)).review_status).toBe("auto_routed"); // waiting paperwork filed
     const lines = await settlementsForLoad(L2002);
     expect(lines).toHaveLength(1);
@@ -282,10 +283,11 @@ describe.skipIf(!ENABLED)("automatic upload -> paystub (real Postgres, RLS, real
     expect(st.deductions).toBe("443.93");
     expect(st.net).toBe("1668.07");
     // re-running everything is a no-op (idempotent)
-    const { runAutoPayrollAction } = await docs();
-    for (const r of [...early, rc]) await runAutoPayrollAction(r.id);
+    const { runAutoPayrollAction, processDocumentAction } = await docs();
+    for (const r of [...early, rc]) { await runAutoPayrollAction(r.id); await processDocumentAction(r.id); }
     expect((await statement(S2)).net).toBe("1668.07");
     expect((await statement(S2)).b.deductions).toHaveLength(3);
+    expect(await q("select id from public.loads where load_number = 'SPA-2002'")).toHaveLength(1);
   });
 
   it("6. ambiguous / unverifiable paperwork is held, never paid", async () => {
@@ -407,5 +409,64 @@ describe.skipIf(!ENABLED)("automatic upload -> paystub (real Postgres, RLS, real
     expect(r.result).toMatchObject({ ok: true, state: "auto_routed" });
     expect((r.result as { payroll?: unknown }).payroll).toBeUndefined();
     expect(await settlementsForLoad(L9)).toHaveLength(0);
+  });
+
+  it("11. a rate con that isn't fully verified (medium confidence) still waits for one 'Create load' click", async () => {
+    as(C);
+    const [r] = await uploadAndProcess("rc-11011-unknown-driver");
+    expect(r.result).toMatchObject({ ok: true, state: "needs_review" });
+    const d = await docRow(r.id);
+    expect((d.routing as { proposed: { kind: string } }).proposed.kind).toBe("create_load");
+    expect(await q("select id from public.loads where load_number = 'SPA-11011'")).toHaveLength(0);
+    const { createLoadFromDocumentAction } = await docs();
+    const fd = new FormData();
+    for (const [k, v] of Object.entries({ load_number: "SPA-11011", broker_name: "Blue Ridge Logistics", origin: "Dallas, TX", destination: "Houston, TX",
+      pickup_date: "2026-10-13", delivery_date: "2026-10-14", total_miles: "240", line_haul_rate: "1100", fuel_surcharge: "0", accessorial_charges: "0", total_revenue: "1100", driver_id: MARCUS })) fd.append(k, v);
+    const created = await createLoadFromDocumentAction(r.id, undefined, fd);
+    if (created && created.ok === false) throw new Error(`create load: ${created.message}`);
+    const [load] = await q<{ id: string }>("select id from public.loads where load_number = 'SPA-11011'");
+    expect(await settlementsForLoad(load.id)).toHaveLength(1); // drafted right after the click
+  });
+
+  it("12. two scans of the same NEW rate con processed at the same moment -> ONE load, ONE pay line", async () => {
+    as(C);
+    const { uploadDocumentsAction, processDocumentAction } = await docs();
+    const fd = new FormData();
+    for (const k of ["rc-12012-scan-a", "rc-12012-scan-b"]) fd.append("files", new File([`%PDF-1.4\n% SYNTHETIC KEY:${k}\n`], `${k}.pdf`, { type: "application/pdf" }));
+    const up = await uploadDocumentsAction(undefined, fd);
+    if (!up.ok) throw new Error(up.error);
+    const res = await Promise.all(up.documents.map((x) => processDocumentAction(x.id)));
+    const loads = await q<{ id: string }>("select id from public.loads where load_number = 'SPA-12012' and profile_id = $1", [C.id]);
+    expect(loads, JSON.stringify(res)).toHaveLength(1);
+    for (const x of up.documents) expect((await docRow(x.id)).load_id).toBe(loads[0].id);
+    expect(await settlementsForLoad(loads[0].id)).toHaveLength(1);
+  });
+
+  it("13. a rate con addressed to another carrier never creates a load", async () => {
+    as(C);
+    const [r] = await uploadAndProcess("rc-13013-other-carrier");
+    expect(r.result).toMatchObject({ ok: true, state: "needs_review" });
+    expect(((await docRow(r.id)).routing as { auto_create: { reasons: string[] } }).auto_create.reasons).toContain("carrier_not_ours");
+    expect(await q("select id from public.loads where load_number = 'SPA-13013'")).toHaveLength(0);
+  });
+
+  it("14. the driver's pay frequency is honoured (semimonthly -> 16th to month end)", async () => {
+    as(C);
+    await exec("update public.drivers set pay_frequency = 'semimonthly' where id = $1", [SAM]);
+    const [r] = await uploadAndProcess("rc-14014-semimonthly");
+    expect((r.result as { payroll?: { state: string } }).payroll?.state).toBe("drafted");
+    const [load] = await q<{ id: string }>("select id from public.loads where load_number = 'SPA-14014'");
+    const st = await statement((await settlementsForLoad(load.id))[0].settlement_id);
+    expect([st.b.header.periodStart, st.b.header.periodEnd]).toEqual(["2026-10-16", "2026-10-31"]);
+    expect(st.net).toBe("750.00"); // 75 % (set in scenario 6) of $1,000.00
+  });
+
+  it("15. lumper receipt on an owner-operator's open draft -> noted, not added to pay", async () => {
+    as(C);
+    const before = (await statement(S2)).net;
+    const [r] = await uploadAndProcess("lumper-2002");
+    expect((r.result as { payroll?: { state: string } }).payroll?.state).toBe("noted");
+    expect((await statement(S2)).net).toBe(before);
+    expect((await statement(S2)).b.additions).toHaveLength(0);
   });
 });

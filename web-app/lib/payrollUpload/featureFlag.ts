@@ -93,3 +93,14 @@ export const GATE_MESSAGE: Record<GateReason, string> = {
   production_not_acknowledged: "Confirming payroll drafts from documents is not enabled for the live system. You can review everything; nothing will be saved.",
   enabled_production: "Confirming creates a settlement DRAFT. Nothing is approved or paid until you do it on the settlement.",
 };
+
+/**
+ * Automatic creation of a load from a fully verified rate confirmation
+ * (owner decision 2026-10-25). Follows the confirmation gate (so it can never
+ * be on in production without the two-variable production switch) and can be
+ * switched off on its own with SMART_LOAD_AUTO_CREATE=off.
+ */
+export function autoLoadCreationEnabled(env: Readonly<Record<string, string | undefined>>): boolean {
+  if (!payrollConfirmGate(env).enabled) return false;
+  return (env.SMART_LOAD_AUTO_CREATE ?? "").trim().toLowerCase() !== "off";
+}

@@ -20,6 +20,7 @@ import {
 } from "./actions";
 import { CANONICAL_DOCUMENT_TYPES, documentTypeLabel } from "@/lib/documents/taxonomy";
 import { REVIEW_REASON_TEXT, type AppliedAction, type ProposedAction, type RoutingRecord } from "@/lib/documents/types";
+import { AUTO_CREATE_REASON_TEXT, type AutoCreateReason } from "@/lib/documents/autoCreateLoad";
 
 export interface ReviewItem {
   id: string;
@@ -216,6 +217,14 @@ function ReviewCard({ item, loads, drivers }: { item: ReviewItem; loads: Option[
             </div>
           </form>
 
+          {proposal?.kind === "create_load" && (r as (RoutingRecord & { auto_create?: { reasons?: AutoCreateReason[] } }) | null)?.auto_create?.reasons?.length ? (
+            <div data-testid="auto-create-reasons" className="rounded-lg border border-white/10 p-3 text-xs text-sp-textSecondary">
+              <p className="font-semibold text-sp-textPrimary">Not created automatically because:</p>
+              <ul className="mt-1 list-inside list-disc">
+                {((r as RoutingRecord & { auto_create: { reasons: AutoCreateReason[] } }).auto_create.reasons).map((x) => <li key={x}>{AUTO_CREATE_REASON_TEXT[x] ?? x}</li>)}
+              </ul>
+            </div>
+          ) : null}
           {proposal?.kind === "create_load" && (
             <form action={createLoad} className="space-y-2 rounded-lg border border-white/10 p-3">
               <p className="text-xs text-sp-textSecondary">

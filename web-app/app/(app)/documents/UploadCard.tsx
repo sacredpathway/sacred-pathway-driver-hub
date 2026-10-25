@@ -155,7 +155,7 @@ export default function UploadCard({
                 {r.message}
               </span>
               {r.payroll && (
-                <span data-testid="upload-payroll" data-state={r.payroll.state} className={"basis-full text-[11px] " + (r.payroll.state === "held" || r.payroll.state === "error" ? "text-sp-warning" : "text-sp-success")}>
+                <span data-testid="upload-payroll" data-state={r.payroll.state} className={"basis-full text-[11px] " + (r.payroll.state === "held" || r.payroll.state === "error" ? "text-sp-warning" : r.payroll.state === "noted" ? "text-sp-textSecondary" : "text-sp-success")}>
                   {r.payroll.message}
                   {r.payroll.settlementId && (
                     <>

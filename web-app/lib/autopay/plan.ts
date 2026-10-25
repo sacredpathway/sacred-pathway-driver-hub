@@ -71,6 +71,7 @@ function dedupe(h: AutoHold[]): AutoHold[] {
 export function automaticDecisions(
   first: PayrollProposal,
   routedLoadId: string | null,
+  periodFor: (date: string) => { start: string; end: string } | AutoHold = payWeekFor,
 ): { decisions: ProposalDecisions; holds: AutoHold[] } {
   const holds: AutoHold[] = [];
   const decisions: ProposalDecisions = {};
@@ -94,7 +95,8 @@ export function automaticDecisions(
   } else {
     const pd = selected.delivery_date?.slice(0, 10) ?? selected.pickup_date?.slice(0, 10) ?? null;
     if (!pd) return { decisions, holds }; // reported as load_not_delivered
-    const w = payWeekFor(pd);
+    const w = periodFor(pd);
+    if ("code" in w) { holds.push(w); return { decisions, holds }; }
     // Authorized recurring deductions (truck lease, insurance…) apply exactly
     // as on the New Settlement screen.
     decisions.target = { kind: "new_draft", periodStart: w.start, periodEnd: w.end, applyRecurring: true };

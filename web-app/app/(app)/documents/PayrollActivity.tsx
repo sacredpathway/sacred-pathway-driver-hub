@@ -26,6 +26,7 @@ const LABEL: Record<string, string> = {
   drafted: "Payroll draft created",
   added_to_draft: "Added to payroll draft",
   deduction_added: "Deduction added to draft",
+  noted: "Note",
   held: "Waiting for you",
   error: "Couldn't finish",
 };
@@ -40,8 +41,9 @@ function Row({ item }: { item: PayrollActivityItem }) {
           <span className="font-semibold">{item.typeLabel}</span>
           {item.loadLabel ? <span className="text-sp-textSecondary"> · {item.loadLabel}</span> : null}
         </span>
-        <span className={waiting ? "font-semibold text-sp-warning" : "font-semibold text-sp-success"}>{LABEL[item.state] ?? item.state}</span>
+        <span className={waiting ? "font-semibold text-sp-warning" : item.state === "noted" ? "font-semibold text-sp-textSecondary" : "font-semibold text-sp-success"}>{LABEL[item.state] ?? item.state}</span>
       </div>
+      {item.state === "noted" && item.holds[0] && <p className="text-sp-textSecondary">{item.holds[0].message}</p>}
       {waiting && item.holds.length > 0 && (
         <ul className="list-inside list-disc text-sp-warning">
           {item.holds.slice(0, 4).map((h, i) => <li key={i}>{h.message}</li>)}

@@ -23,6 +23,7 @@ export function describeOutcome(o: AutoOutcome): string {
     case "drafted": return `Payroll draft created${o.deductionsAdded ? ` (+${o.deductionsAdded} receipt deduction${o.deductionsAdded === 1 ? "" : "s"})` : ""}. Review and approve it on the settlement — nothing is paid automatically.`;
     case "added_to_draft": return `Added to the driver's open payroll draft${o.deductionsAdded ? ` (+${o.deductionsAdded} receipt deduction${o.deductionsAdded === 1 ? "" : "s"})` : ""}.`;
     case "deduction_added": return "Receipt added as a deduction on the driver's payroll draft.";
+    case "noted": return o.holds[0]?.message ?? "";
     case "held": return `Payroll waiting: ${o.holds[0]?.message ?? "needs your review."}`;
     case "error": return o.holds[0]?.message ?? "Automatic payroll couldn't finish.";
     case "off": return "";

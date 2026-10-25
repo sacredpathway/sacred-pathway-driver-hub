@@ -227,3 +227,31 @@ describe("autoPayrollForDocument", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("owner decisions 2026-10-25", () => {
+  it("lumper receipt on a driver's draft -> noted, never added to pay", async () => {
+    const { d, calls } = deps({
+      doc: { routedType: "lumper_fee" },
+      driverPay: async () => paySettingsForDriver({ pay_percentage: 88, settlement_type: "owner_operator" }, true),
+      expenseForDocument: async () => ({ id: "e9", load_id: LOAD, category: "lumper", amount: 150, receipt_date: "2026-10-14", vendor_name: "Capstone", source_document_id: DOC }),
+      draftForLoad: async () => ({ settlementId: "S1", status: "draft", updatedAt: "t", driverId: DRIVER, loadIds: [LOAD], relatedExpenseIds: [] }),
+    });
+    const o = await autoPayrollForDocument(d, DOC);
+    expect(o).toMatchObject({ state: "noted", settlementId: "S1", holds: [{ code: "lumper_not_reimbursed" }] });
+    expect(calls).toEqual([]);
+  });
+  it("the driver's pay frequency decides the new draft's period (semimonthly)", async () => {
+    const targets: unknown[] = [];
+    const { d } = deps({
+      driverPeriod: async () => ({ frequency: "semimonthly", recent: [] }),
+      proposal: async (_id, dec) => { if (dec.target) targets.push(dec.target); return dec.target ? proposal({ status: "ready", needs: [], canConfirm: true, target: { options: [], selected: dec.target } }) : proposal(); },
+    });
+    expect((await autoPayrollForDocument(d, DOC)).state).toBe("drafted");
+    expect(targets[0]).toEqual({ kind: "new_draft", periodStart: "2026-10-01", periodEnd: "2026-10-15", applyRecurring: true });
+  });
+  it("biweekly driver with no earlier two-week settlement -> held, never guessed", async () => {
+    const { d, calls } = deps({ driverPeriod: async () => ({ frequency: "biweekly", recent: [] }) });
+    expect(await autoPayrollForDocument(d, DOC)).toMatchObject({ state: "held", holds: [{ code: "pay_period_unknown" }] });
+    expect(calls).not.toContain("confirm");
+  });
+});

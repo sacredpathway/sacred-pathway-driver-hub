@@ -8,6 +8,9 @@
 // =============================================================================
 
 import { webExtractionVersion } from "./versions";
+import { carrierIdentityFromProfile } from "../payrollUpload/carrierIdentity";
+import { autoLoadCreationEnabled } from "../payrollUpload/featureFlag";
+import { assertLoadColumns } from "@/lib/loads/schema";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logActivity, type ActivityAction } from "@/lib/activity/log";
 import type { DocumentRepo, ExtractorResult, InsertResult } from "./pipeline";
@@ -90,6 +93,36 @@ export function createDocumentRepo(supabase: SupabaseClient, ownerId: string): D
     async getDocument(id) {
       const { data } = await supabase.from("documents").select(AUTOMATION_DOCUMENT_COLUMNS).eq("id", id).eq("profile_id", ownerId).maybeSingle();
       return (data as unknown as AutomationDocument) ?? null;
+    },
+
+    autoCreateLoads: autoLoadCreationEnabled(process.env),
+
+    async carrierIdentity() {
+      const { data } = await supabase.from("profiles").select("id, company_name, mc_number, dot_number, account_type, account_role").eq("id", ownerId).maybeSingle();
+      return carrierIdentityFromProfile((data as never) ?? null);
+    },
+
+    async createLoad(row) {
+      // Preferred: the database serialises "create if the number doesn't exist" (proposed migration #5).
+      const rpc = await supabase.rpc("sph_load_create_verified", { p: row });
+      if (!rpc.error) {
+        const r = (rpc.data ?? {}) as { id?: unknown; created?: unknown };
+        if (typeof r.id === "string") return { ok: true, id: r.id, created: r.created === true, guarded: true };
+        return { ok: false, message: "Unexpected response creating the load." };
+      }
+      const code = (rpc.error as { code?: string }).code;
+      const missing = code === "PGRST202" || code === "42883" || /could not find the function|does not exist/i.test(rpc.error.message ?? "");
+      if (!missing) return { ok: false, message: rpc.error.message };
+      // Fallback (migration #5 not installed): plain insert; the pipeline reconciles races.
+      const { data, error } = await supabase.from("loads")
+        .insert(assertLoadColumns({ ...row, profile_id: ownerId }, "autoCreateLoad")).select("id").single();
+      if (error || !data) return { ok: false, message: error?.message ?? "Could not create the load." };
+      return { ok: true, id: String((data as { id: string }).id), created: true, guarded: false };
+    },
+
+    async deleteAutoCreatedLoad(id) {
+      const { data, error } = await supabase.from("loads").delete().eq("id", id).eq("profile_id", ownerId).select("id");
+      return !error && Array.isArray(data) && data.length === 1;
     },
 
     async listWaitingDocuments(limit) {

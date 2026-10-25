@@ -20,6 +20,9 @@
 import { decideRouting, effectiveExtraction, type Decision } from "./routing";
 import { normalizeIdentifier } from "./matching";
 import { isRoutableVersion } from "./versions";
+import { AUTO_CREATE_REASON_TEXT, decideAutoCreateLoad, type LoadDraftRow } from "./autoCreateLoad";
+import { sanitizePayrollExtraction } from "./payrollExtraction";
+import type { CarrierIdentity } from "../payrollUpload/carrierIdentity";
 import { DOCUMENT_TYPE_GROUP, isCanonicalDocumentType, routableDocumentType } from "./taxonomy";
 import type {
   AppliedAction,
@@ -70,6 +73,15 @@ export interface DocumentRepo {
   insertDriverDocument(doc: AutomationDocument, draft: ComplianceDraft): Promise<InsertResult<Record<string, unknown>>>;
   getDriverDocumentBySource(documentId: string): Promise<Record<string, unknown> | null>;
   deleteDriverDocumentIfUnchanged(id: string, documentId: string, snapshot: Record<string, unknown>): Promise<boolean>;
+  /** When true, a fully verified rate con for an unknown load creates the load (owner decision 2026-10-25). */
+  autoCreateLoads?: boolean;
+  /** The signed-in carrier's own identity (profile), for "is this our load?". */
+  carrierIdentity?(): Promise<CarrierIdentity | null>;
+  /** Insert a load for this account (only from decideAutoCreateLoad). */
+  /** guarded = the database serialised it (migration #5): `created` false means the number already existed. */
+  createLoad?(row: LoadDraftRow): Promise<{ ok: true; id: string; created: boolean; guarded: boolean } | { ok: false; message: string }>;
+  /** Remove a load THIS automation just created and lost a race for. False if anything references it. */
+  deleteAutoCreatedLoad?(id: string): Promise<boolean>;
   /** Documents of this account waiting in review (newest first), for re-matching after a load appears. */
   listWaitingDocuments(limit: number): Promise<AutomationDocument[]>;
   /** True when the document is on a line of an approved/paid settlement. Throws when the check can't be completed. */
@@ -333,6 +345,10 @@ export async function routeDocument(repo: DocumentRepo, doc: AutomationDocument)
   if (!(await repo.claimRouting(doc.id, "needs_review", record))) {
     return { state: "skipped", reason: "already_routed" };
   }
+  if (decision.decision !== "auto" && decision.proposed?.kind === "create_load" && repo.autoCreateLoads) {
+    const created = await tryAutoCreateLoad(repo, doc, record);
+    if (created) return created;
+  }
   if (decision.decision !== "auto" || !decision.proposed) {
     await repo.log(doc.id, "needs_review", { label: "Document needs review", reasons: record.reasons, type: record.type });
     return { state: "needs_review", routing: record };
@@ -587,4 +603,96 @@ export async function rerouteWaitingForLoad(repo: DocumentRepo, loadId: string):
     filed.push(doc.id);
   }
   return filed;
+}
+
+// -----------------------------------------------------------------------------
+//  Automatic load creation (verified rate cons for loads not yet entered)
+// -----------------------------------------------------------------------------
+
+const CREATE_ONLY_REASONS: ReadonlySet<ReviewReason> = new Set<ReviewReason>(["rate_con_no_load", "load_not_found"]);
+
+/**
+ * Creates the load + attaches the document when decideAutoCreateLoad says
+ * everything is verified. Returns null when not applicable (the caller keeps
+ * the normal review path), or the final outcome. Never throws for expected
+ * conflicts: anything unexpected leaves the document in review.
+ */
+async function tryAutoCreateLoad(repo: DocumentRepo, doc: AutomationDocument, record: RoutingRecord): Promise<ProcessOutcome | null> {
+  if (!repo.createLoad || !repo.carrierIdentity) return null;
+  if (!record.reasons.length || !record.reasons.every((r) => CREATE_ONLY_REASONS.has(r))) return null;
+  if (doc.extraction_version !== "v3") return null;
+  const stored = (doc.extracted_data ?? {}) as { parse_stage?: string; type_hint?: string | null };
+  const x = sanitizePayrollExtraction(doc.extracted_data);
+  const key = normalizeIdentifier(x.values.load_number);
+  const [identity, drivers, loads] = await Promise.all([
+    repo.carrierIdentity(), repo.listDrivers(), key ? repo.findLoadCandidates([key]) : Promise.resolve([]),
+  ]);
+  const hint = stored.type_hint ? routableDocumentType(stored.type_hint) : null;
+  const d = decideAutoCreateLoad({
+    extraction: x, parseStage: stored.parse_stage ?? null,
+    humanCorrected: !!record.corrections && Object.keys(record.corrections).length > 0,
+    duplicateOf: doc.duplicate_of, typeHintMismatch: !!hint && hint !== "other" && hint !== "rate_confirmation",
+    identity, ownerId: repo.ownerId, drivers, loads, today: ymd(repo.now()),
+  });
+  if (!d.eligible) {
+    record.history.push(event(repo, "automation", "auto_create_load_skipped", d.reasons.map((r) => AUTO_CREATE_REASON_TEXT[r]).join(" ")));
+    (record as RoutingRecord & { auto_create?: unknown }).auto_create = { eligible: false, reasons: d.reasons };
+    await repo.saveRouting(doc.id, "needs_review", record, false);
+    await repo.log(doc.id, "needs_review", { label: "Rate confirmation needs review before a load is created", reasons: d.reasons });
+    return { state: "needs_review", routing: record };
+  }
+
+  const ins = await repo.createLoad(d.row);
+  if (!ins.ok) {
+    record.history.push(event(repo, "automation", "auto_create_load_failed", ins.message));
+    await repo.saveRouting(doc.id, "needs_review", record, false);
+    return { state: "needs_review", routing: record };
+  }
+  // Two uploads of the same new load at the same moment: both may insert.
+  // Every racer re-reads and keeps the SAME winner (lowest id); a loser removes
+  // the row it just created and files against the winner.
+  let loadId = ins.id;
+  const createdHere = ins.created;
+  const same = ins.guarded ? [] : (await repo.findLoadCandidates([key!])).filter((l) => l.profile_id === repo.ownerId && normalizeIdentifier(l.load_number) === key);
+  if (!ins.guarded && same.length > 1) {
+    const winner = [...same].sort((a, b) => a.id.localeCompare(b.id))[0];
+    if (winner.id !== ins.id) {
+      const removed = await (repo.deleteAutoCreatedLoad?.(ins.id) ?? Promise.resolve(false));
+      if (!removed) {
+        record.reasons = ["load_ambiguous"];
+        record.history.push(event(repo, "automation", "auto_create_load_conflict", `${ins.id} vs ${winner.id}`));
+        await repo.saveRouting(doc.id, "needs_review", record, false);
+        return { state: "needs_review", routing: record };
+      }
+      loadId = winner.id;
+    }
+  }
+  const at = iso(repo.now());
+  const created: AppliedAction = {
+    kind: "create_load", target_table: "loads", target_id: loadId, mode: "automatic", applied_at: at, before: null,
+    after: { load_number: d.row.load_number, total_revenue: d.row.total_revenue, driver_id: d.row.driver_id },
+  };
+  const att = await applyProposal(repo, doc, { kind: "attach_load", load_id: loadId }, "automatic");
+  if (!att.ok) {
+    record.applied = [...record.applied, ...(createdHere && loadId === ins.id ? [created] : [])];
+    record.reasons = [att.reason];
+    record.history.push(event(repo, "automation", "apply_failed", att.detail));
+    await repo.saveRouting(doc.id, "needs_review", record, false);
+    return { state: "needs_review", routing: record };
+  }
+  record.decision = "auto";
+  record.reasons = [];
+  record.proposed = { kind: "attach_load", load_id: loadId };
+  const madeIt = createdHere && loadId === ins.id;
+  record.applied = [...record.applied, ...(madeIt ? [created] : []), att.action];
+  record.history.push(event(repo, "automation", madeIt ? "applied:create_load" : "joined_existing_load", loadId));
+  record.history.push(event(repo, "automation", `applied:${att.action.kind}`, loadId));
+  await repo.saveRouting(doc.id, "auto_routed", record, false);
+  await repo.log(doc.id, "auto_routed", {
+    label: madeIt
+      ? `Load ${d.row.load_number} created automatically from a verified rate confirmation (driver ${d.driverName})`
+      : `Rate confirmation filed to load ${d.row.load_number} (created moments earlier by another upload)`,
+    document_id: doc.id, action: "create_load", target_table: "loads", target_id: loadId, mode: "automatic", amount: d.row.total_revenue,
+  });
+  return { state: "auto_routed", routing: record };
 }

@@ -26,8 +26,18 @@ import type { PayrollProposal, ProposalDecisions } from "../payrollUpload/propos
 import type { Deduction } from "../settlements/model";
 import type { DriverPaySettings } from "../settlements/workflow";
 import { automaticDecisions, deductionsForExpenses, holdsOf, payRuleHold, type AutoHold, type ExpenseRow } from "./plan";
+import { payPeriodFor, type PeriodSetting } from "./period";
 
-export type AutoState = "drafted" | "added_to_draft" | "deduction_added" | "held" | "skipped" | "off" | "error";
+export type AutoState = "drafted" | "added_to_draft" | "deduction_added" | "noted" | "held" | "skipped" | "off" | "error";
+
+/**
+ * Lumper (owner decision 2026-10-25): reimbursed to the driver only when a
+ * verified pay rule AND evidence establish it is owed. No such rule exists in
+ * the data model today (pay rules, lease rules and custom categories carry no
+ * lumper-reimbursement term), so a lumper receipt is never added to driver pay;
+ * when the load is on a driver's draft the carrier is told, so it isn't missed.
+ */
+export const LUMPER_NOTE = "Lumper receipt filed as a company expense. It was not added to the driver's pay: no verified pay rule says lumpers are reimbursed. If the driver paid it, add a Lumper Reimbursement on the settlement.";
 
 export interface AutoOutcome {
   state: AutoState;
@@ -64,7 +74,15 @@ export interface AutoDeps {
   /** Smart Payroll proposal (fresh server reads), with the given decisions. */
   proposal(documentId: string, decisions: ProposalDecisions): Promise<PayrollProposal>;
   driverPay(driverId: string): Promise<DriverPaySettings | null>;
+  /** drivers.pay_frequency + this driver's recent settlement periods. */
+  driverPeriod?(driverId: string): Promise<PeriodSetting>;
   loadDriver(loadId: string): Promise<string | null>;
+  /**
+   * Among this document and its same-identity copies (re-scans of the same
+   * rate con), true when THIS one is the earliest upload and no copy is on a
+   * settlement. Only that one may proceed; later copies stay held.
+   */
+  isEarliestUnlinkedCopy?(documentId: string, sameIdentityIds: string[]): Promise<boolean>;
   /** confirmPayrollDraft with mode "automatic". */
   confirm(documentId: string, decisions: ProposalDecisions): Promise<ConfirmResult>;
   /** Expenses linked to this load (any source). */
@@ -107,19 +125,28 @@ async function rateConfirmation(deps: AutoDeps, doc: AutoDocument): Promise<Auto
 
   // 1. First pass: what the paperwork and the records say, with the filed load.
   const first = await deps.proposal(doc.id, { loadId: doc.load_id });
-  const auto = automaticDecisions(first, doc.load_id);
+  const driverId = first.driver.selected?.id ?? (await deps.loadDriver(doc.load_id));
+  const period: PeriodSetting = driverId && deps.driverPeriod ? await deps.driverPeriod(driverId) : { frequency: null, recent: [] };
+  const auto = automaticDecisions(first, doc.load_id, (date) => payPeriodFor(date, period));
   if (auto.holds.length) return { state: "held", holds: auto.holds };
 
   // 2. The driver must have a stored pay agreement (never invent a rate).
-  const driverId = first.driver.selected?.id ?? (await deps.loadDriver(doc.load_id));
   if (driverId) {
     const h = payRuleHold(await deps.driverPay(driverId));
     if (h) return { state: "held", holds: [h] };
   }
 
   // 3. Second pass with the automatic choices: every warning/blocker = hold.
-  const second = await deps.proposal(doc.id, auto.decisions);
-  const holds = holdsOf(second);
+  let second = await deps.proposal(doc.id, auto.decisions);
+  let holds = holdsOf(second);
+  // Re-scans of the same rate con: the earliest upload goes ahead (the copy
+  // is recorded as acknowledged on the confirmation); later copies stay held.
+  if (holds.length && holds.every((h) => h.code === "possible_duplicate") && deps.isEarliestUnlinkedCopy
+      && (await deps.isEarliestUnlinkedCopy(doc.id, second.duplicates?.sameIdentityIds ?? []))) {
+    auto.decisions.acknowledged = [...(auto.decisions.acknowledged ?? []), "duplicate:possible"];
+    second = await deps.proposal(doc.id, auto.decisions);
+    holds = holdsOf(second);
+  }
   if (holds.length || !second.canConfirm) {
     return { state: "held", holds: holds.length ? holds : [{ code: "not_ready", message: "This load isn't ready for payroll yet." }] };
   }
@@ -164,6 +191,9 @@ async function receipt(deps: AutoDeps, doc: AutoDocument): Promise<AutoOutcome> 
   if (!driverId) return { state: "skipped", holds: [], detail: "no_driver" };
   const pay = await deps.driverPay(driverId);
   if (!pay) return { state: "skipped", holds: [], detail: "driver_pay_unknown" };
+  if ((expense.category ?? "").toLowerCase() === "lumper") {
+    return { state: "noted", holds: [{ code: "lumper_not_reimbursed", message: LUMPER_NOTE }], settlementId: draft.settlementId };
+  }
   const done = await deps.deductedExpenseIds([expense.id]);
   for (const x of draft.relatedExpenseIds) done.add(x);
   const ds = deductionsForExpenses([expense], pay, done);
