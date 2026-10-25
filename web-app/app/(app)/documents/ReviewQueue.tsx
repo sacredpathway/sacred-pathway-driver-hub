@@ -97,7 +97,7 @@ function ReviewCard({ item, loads, drivers }: { item: ReviewItem; loads: Option[
     <li className="space-y-3 rounded-xl border border-sp-warning/30 bg-sp-card p-4">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="space-x-2">
-          <span className="text-sm font-semibold text-sp-textPrimary">{item.typeLabel}</span>
+          <span className="text-sm font-semibold text-sp-textPrimary">{item.duplicateOf && notRead ? "Duplicate upload" : item.typeLabel}</span>
           {!notRead && (
             <span className="rounded bg-sp-warning/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sp-warning">
               AI suggestion · not verified
@@ -120,7 +120,9 @@ function ReviewCard({ item, loads, drivers }: { item: ReviewItem; loads: Option[
 
       {notRead ? (
         <p className="text-xs text-sp-textSecondary">
-          {item.status === "failed"
+          {item.duplicateOf
+            ? `Same file as a document you already uploaded (${item.duplicateOf.slice(0, 8)}) — not read again, so it can't be paid twice. Dismiss it.`
+            : item.status === "failed"
             ? `Could not read this file${item.errorMessage ? `: ${item.errorMessage.slice(0, 160)}` : "."}`
             : item.status === "processing"
             ? "Being read…"
