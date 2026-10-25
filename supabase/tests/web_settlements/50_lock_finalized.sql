@@ -38,8 +38,8 @@ select tst.move(:K, 'draft', 'approved') is not null;
 
 reset role;
 set client_min_messages = warning;
-\i ../../migrations/REVIEW_BEFORE_APPLYING_20261024120000_lock_finalized_settlements.sql
-\i ../../migrations/REVIEW_BEFORE_APPLYING_20261024120000_lock_finalized_settlements.sql
+\i ../../migrations_pending/REVIEW_BEFORE_APPLYING_20261024120000_lock_finalized_settlements.sql
+\i ../../migrations_pending/REVIEW_BEFORE_APPLYING_20261024120000_lock_finalized_settlements.sql
 reset client_min_messages;
 create temp table lock_fp as select tst.fp(:K) as fp;
 grant select on lock_fp to authenticated;

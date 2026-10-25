@@ -26,8 +26,8 @@ P=(psql -X -v ON_ERROR_STOP=1 -q)
 "${P[@]}" -f "$WS/01_prod_parity.sql" >/dev/null 2>&1
 for m in "$WS/vendor/ios_20260912120000_driver_pay_and_settlements.sql" "$WS/vendor/ios_20260916120000_settlement_driver_portal.sql" \
          "$REPO"/supabase/migrations/20261001120000_paystub_payment_integrity.sql "$REPO"/supabase/migrations/20261001120100_cross_platform_payment_integrity.sql \
-         "$REPO"/supabase/migrations/20261002120000_document_automation.sql "$REPO"/supabase/migrations/20261023120000_payroll_custom_categories.sql \
-         "$REPO"/supabase/migrations/20261023130000_web_settlement_atomic_writes.sql "$REPO"/supabase/migrations/20261023140000_settlement_lock_order.sql \
+         "$REPO"/supabase/migrations/20261002120000_document_automation.sql "$REPO"/supabase/migrations/20261024011809_payroll_custom_categories.sql \
+         "$REPO"/supabase/migrations/20261024012624_web_settlement_atomic_writes.sql "$REPO"/supabase/migrations/20261024092246_settlement_lock_order.sql \
          "$REPO"/supabase/migrations_proposed/PROPOSED_20261105120000_smart_payroll_upload.sql; do
   "${P[@]}" -c "set client_min_messages = warning" -f "$m" >/dev/null
 done

@@ -14,7 +14,7 @@ import { recalculate, lineFromLoad, audit } from "./workflow";
 import type { SettlementBundle } from "./model";
 
 const REPO = join(__dirname, "..", "..", "..");
-const MIGRATION = readFileSync(join(REPO, "supabase/migrations/20261023130000_web_settlement_atomic_writes.sql"), "utf8");
+const MIGRATION = readFileSync(join(REPO, "supabase/migrations/20261024012624_web_settlement_atomic_writes.sql"), "utf8");
 const FIXTURE = join(REPO, "supabase/tests/web_settlements/generated/web_payload.json");
 
 // Columns the function accepts only from the iPhone (2.3.7+). The web never

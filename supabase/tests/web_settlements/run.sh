@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  Local database tests for the web settlement workflow:
-#    20261023120000_payroll_custom_categories.sql
-#    20261023130000_web_settlement_atomic_writes.sql
-#    20261023140000_settlement_lock_order.sql (lock order; fixes race C6)
+#    20261024011809_payroll_custom_categories.sql
+#    20261024012624_web_settlement_atomic_writes.sql
+#    20261024092246_settlement_lock_order.sql (lock order; fixes race C6)
 #  on a production-shaped schema: base tables + the iPhone repo's settlement
 #  migrations (vendored verbatim) + the web payment-integrity guards.
 #
@@ -19,9 +19,9 @@ MIGRATIONS=(
   "$REPO/supabase/migrations/20261001120000_paystub_payment_integrity.sql"
   "$REPO/supabase/migrations/20261001120100_cross_platform_payment_integrity.sql"
   "$REPO/supabase/migrations/20261002120000_document_automation.sql"
-  "$REPO/supabase/migrations/20261023120000_payroll_custom_categories.sql"
-  "$REPO/supabase/migrations/20261023130000_web_settlement_atomic_writes.sql"
-  "$REPO/supabase/migrations/20261023140000_settlement_lock_order.sql"
+  "$REPO/supabase/migrations/20261024011809_payroll_custom_categories.sql"
+  "$REPO/supabase/migrations/20261024012624_web_settlement_atomic_writes.sql"
+  "$REPO/supabase/migrations/20261024092246_settlement_lock_order.sql"
 )
 PGBIN="${PGBIN:-$(dirname "$(command -v postgres 2>/dev/null || echo /usr/lib/postgresql/16/bin/postgres)")}"
 PORT="${PGPORT_TEST:-54333}"

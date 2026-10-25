@@ -51,7 +51,7 @@ export async function loadBundle(supabase: SupabaseClient, id: string): Promise<
   };
 }
 
-/** True once 20261023120000_payroll_custom_categories.sql is applied. */
+/** True once 20261024011809_payroll_custom_categories.sql is applied. */
 export async function customCategoriesAvailable(supabase: SupabaseClient): Promise<boolean> {
   const { error } = await supabase.from("payroll_custom_categories").select("id").limit(1);
   return !error;
@@ -186,7 +186,7 @@ export async function lastAppliedRecurring(supabase: SupabaseClient, ruleIds: st
 
 // =============================================================================
 //  Atomic writes — every settlement write goes through ONE database
-//  transaction (20261023130000_web_settlement_atomic_writes.sql). There is no
+//  transaction (20261024012624_web_settlement_atomic_writes.sql). There is no
 //  multi-request fallback: if the functions are missing, nothing is written.
 // =============================================================================
 

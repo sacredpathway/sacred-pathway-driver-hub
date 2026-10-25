@@ -1,4 +1,4 @@
-// Migration #3 (20261023140000_settlement_lock_order.sql) must be the
+// Migration #3 (20261024092246_settlement_lock_order.sql) must be the
 // production functions from #2 (20261023130000, sha 3a5b3456…) plus ONLY the
 // two documented lock blocks. Any other drift — a changed check, message,
 // payload key or column — fails here before it can reach the database.
@@ -8,8 +8,8 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 const DIR = join(__dirname, "..", "..", "..", "supabase", "migrations");
-const M2 = readFileSync(join(DIR, "20261023130000_web_settlement_atomic_writes.sql"), "utf8");
-const M3 = readFileSync(join(DIR, "20261023140000_settlement_lock_order.sql"), "utf8");
+const M2 = readFileSync(join(DIR, "20261024012624_web_settlement_atomic_writes.sql"), "utf8");
+const M3 = readFileSync(join(DIR, "20261024092246_settlement_lock_order.sql"), "utf8");
 
 function fn(src: string, name: string): string {
   const start = src.indexOf(`create or replace function public.${name}(p jsonb)`);

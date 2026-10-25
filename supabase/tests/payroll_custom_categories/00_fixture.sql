@@ -1,4 +1,4 @@
--- Local fixture for 20261023120000_payroll_custom_categories.sql.
+-- Local fixture for 20261024011809_payroll_custom_categories.sql.
 -- Mirrors the production pieces the migration touches: Supabase roles,
 -- auth.uid(), profiles, settlements and the settlement_additions /
 -- settlement_deductions tables with their production CHECKs + RLS

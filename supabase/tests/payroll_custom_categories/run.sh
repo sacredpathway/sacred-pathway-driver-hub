@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Local database tests for 20261023120000_payroll_custom_categories.sql.
+# Local database tests for 20261024011809_payroll_custom_categories.sql.
 # Throwaway Postgres cluster in a temp dir — never touches any Supabase project.
 #   PGBIN=/usr/lib/postgresql/16/bin ./run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
-MIGRATION="$REPO/supabase/migrations/20261023120000_payroll_custom_categories.sql"
+MIGRATION="$REPO/supabase/migrations/20261024011809_payroll_custom_categories.sql"
 PGBIN="${PGBIN:-$(dirname "$(command -v postgres 2>/dev/null || echo /usr/lib/postgresql/16/bin/postgres)")}"
 PORT="${PGPORT_TEST:-54331}"
 WORK="$(mktemp -d)"; chmod 755 "$WORK"
