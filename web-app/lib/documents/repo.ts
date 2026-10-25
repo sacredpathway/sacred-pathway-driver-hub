@@ -24,7 +24,7 @@ import type {
 
 export const AUTOMATION_DOCUMENT_COLUMNS =
   "id, profile_id, load_id, document_type, storage_path, status, extracted_data, extraction_version, " +
-  "review_status, routing, duplicate_of, content_sha256, source, updated_at, error_message";
+  "review_status, routing, duplicate_of, content_sha256, source, updated_at, error_message, settlement_id";
 
 const LOAD_COLUMNS =
   "id, profile_id, load_number, broker_name, pickup_date, delivery_date, origin, destination, total_revenue, status";
@@ -90,6 +90,14 @@ export function createDocumentRepo(supabase: SupabaseClient, ownerId: string): D
     async getDocument(id) {
       const { data } = await supabase.from("documents").select(AUTOMATION_DOCUMENT_COLUMNS).eq("id", id).eq("profile_id", ownerId).maybeSingle();
       return (data as unknown as AutomationDocument) ?? null;
+    },
+
+    async listWaitingDocuments(limit) {
+      const { data, error } = await supabase.from("documents").select(AUTOMATION_DOCUMENT_COLUMNS)
+        .eq("profile_id", ownerId).eq("review_status", "needs_review").is("load_id", null)
+        .order("created_at", { ascending: false }).limit(limit);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as unknown as AutomationDocument[];
     },
 
     async claimExtraction(id, staleBeforeIso) {

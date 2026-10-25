@@ -158,6 +158,8 @@ export interface AutomationDocument {
   source: string | null;
   updated_at: string | null;
   error_message: string | null;
+  /** Settlement (draft or finalized) this document was confirmed onto, if any. */
+  settlement_id?: string | null;
 }
 
 export interface LoadCandidate {

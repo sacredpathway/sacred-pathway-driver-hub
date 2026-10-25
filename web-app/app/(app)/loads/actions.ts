@@ -30,6 +30,8 @@ import {
   type UpdateLoadPayload,
 } from "@/lib/loads/payloads";
 import { saveBrokerContact, type BrokerContactInput } from "@/lib/brokers/contact";
+import { afterLoadCreated } from "@/lib/autopay/server";
+import { createSettlementAction, saveSettlementAction } from "@/app/(app)/settlements/actions";
 
 // Form parsing helpers live in lib/loads/formFields.ts so payload builders are
 // testable outside this "use server" module.
@@ -418,8 +420,13 @@ export async function createLoadAction(
     },
   });
 
+  // Paperwork uploaded before this load existed (BOL, POD, receipts, a rate
+  // con) is re-matched now; anything uncertain stays in review.
+  await afterLoadCreated(supabase, { id: user.id, email: user.email ?? null }, data.id, { createSettlementAction, saveSettlementAction }).catch(() => 0);
+
   revalidatePath("/loads");
   revalidatePath("/dashboard");
+  revalidatePath("/documents");
   redirect(
     `/loads/${data.id}?created=1` +
       (brokerResult.status === "failed" ? "&broker_contact=failed" : "")

@@ -36,6 +36,8 @@ export interface ReviewItem {
   corrections: Record<string, string | number | boolean>;
   editableFields: string[];
   linkedLoadLabel: string | null;
+  /** Driver printed on a rate con that exactly matches one of yours (owner confirms). */
+  suggestedDriverId?: string | null;
 }
 
 export interface Option {
@@ -104,6 +106,9 @@ function ReviewCard({ item, loads, drivers }: { item: ReviewItem; loads: Option[
           {item.linkedLoadLabel && <span className="text-xs text-sp-textSecondary">Linked: {item.linkedLoadLabel}</span>}
         </div>
         <div className="flex items-center gap-3 text-xs">
+          {item.type === "rate_confirmation" && item.status === "processed" && (
+            <a href={`/documents/${item.id}/payroll`} className="text-sp-gold hover:underline">Payroll review</a>
+          )}
           {item.url && (
             <a href={item.url} target="_blank" rel="noreferrer" className="text-sp-gold hover:underline">
               Open file
@@ -229,6 +234,13 @@ function ReviewCard({ item, loads, drivers }: { item: ReviewItem; loads: Option[
                     />
                   </label>
                 ))}
+                <label className="space-y-1 text-[11px] text-sp-textSecondary">
+                  driver (who gets paid)
+                  <select name="driver_id" defaultValue={item.suggestedDriverId ?? ""} className={input} data-testid="create-load-driver">
+                    <option value="">— no driver yet —</option>
+                    {drivers.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+                  </select>
+                </label>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <Msg state={createState} />

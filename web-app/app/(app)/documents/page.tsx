@@ -25,6 +25,12 @@ import { documentTypeLabel, storedValuesForType } from "@/lib/documents/taxonomy
 import { FIELDS_BY_TYPE } from "@/lib/documents/extraction";
 import { effectiveExtraction } from "@/lib/documents/routing";
 import type { RoutingRecord } from "@/lib/documents/types";
+import { PayrollActivity, type PayrollActivityItem } from "./PayrollActivity";
+import { ResumeProcessing } from "./ResumeProcessing";
+import { autopayOf, autoGate } from "@/lib/autopay/wire";
+import { matchDriver } from "@/lib/documents/matching";
+import { sanitizePayrollExtraction } from "@/lib/documents/payrollExtraction";
+import { resumeCandidates } from "@/lib/documents/resume";
 
 interface Filters {
   type?: string;
@@ -56,6 +62,7 @@ export default async function DocumentsPage({
   };
 
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   // -----------------------------------------------------------------------
   // Pull every doc + every load + every broker. For a single carrier the
@@ -80,7 +87,7 @@ export default async function DocumentsPage({
       .select("id, load_number, broker_name, pickup_date"),
     supabase
       .from("drivers")
-      .select("id, name, active")
+      .select("id, profile_id, name, active, cdl_number, cdl_state")
       .order("active", { ascending: false })
       .order("name", { ascending: true })
       .limit(500),
@@ -147,6 +154,27 @@ export default async function DocumentsPage({
   const driverOptions: Option[] = ((driversRaw ?? []) as Array<{ id: string; name: string; active: boolean | null }>)
     .map((d) => ({ id: d.id, label: d.active === false ? `${d.name} (inactive)` : d.name }));
 
+  const driverRows = ((driversRaw ?? []) as Array<{ id: string; profile_id: string; name: string; active: boolean | null; cdl_number: string | null; cdl_state: string | null }>);
+
+  // Interrupted uploads: website files never read, or stuck "processing".
+  const resumeIds = resumeCandidates(docsAll as never);
+
+  // What automatic payroll did with each document.
+  const gate = autoGate(process.env);
+  const payrollItems: PayrollActivityItem[] = docsAll
+    .map((d) => ({ d, a: autopayOf(d.routing) }))
+    .filter((x): x is { d: TruckDocument; a: NonNullable<ReturnType<typeof autopayOf>> } => !!x.a && x.a.state !== "skipped" && x.a.state !== "off")
+    .sort((x, y) => String(y.a.at ?? "").localeCompare(String(x.a.at ?? "")))
+    .slice(0, 15)
+    .map(({ d, a }) => {
+      const routing = d.routing as RoutingRecord | null;
+      const l = d.load_id ? loadById.get(d.load_id) : undefined;
+      return {
+        id: d.id, typeLabel: documentTypeLabel(routing?.type ?? d.document_type), loadLabel: l ? loadLabel(l) : null,
+        state: a.state, holds: a.holds, settlementId: a.settlement_id ?? (d as { settlement_id?: string | null }).settlement_id ?? null, at: a.at ?? null,
+      };
+    });
+
   const reviewDocs = docsAll.filter(
     (d) => d.review_status === "needs_review" || (d.source === "web" && d.review_status == null),
   );
@@ -164,8 +192,19 @@ export default async function DocumentsPage({
     const ai = effectiveExtraction(d.extracted_data, null).extraction;
     const type = routing?.type ?? ai.document_type;
     const linked = d.load_id ? loadById.get(d.load_id) : undefined;
+    // Driver printed on a rate con (payroll extraction) — pre-selected in
+    // "Create load" only on an exact, unique name match; the owner confirms.
+    let suggestedDriverId: string | null = null;
+    if (type === "rate_confirmation" && user) {
+      const name = sanitizePayrollExtraction(d.extracted_data).values.driver_name;
+      if (typeof name === "string" && name) {
+        const m = matchDriver(user.id, driverRows, { person_name: name });
+        suggestedDriverId = m.target_id;
+      }
+    }
     return {
       id: d.id,
+      suggestedDriverId,
       url: reviewUrls.get(d.id) ?? null,
       createdAt: d.created_at,
       status: d.status ?? "pending",
@@ -235,6 +274,8 @@ export default async function DocumentsPage({
         <UploadCard loads={loads} />
       </div>
 
+      <ResumeProcessing ids={resumeIds} />
+      <PayrollActivity items={payrollItems} enabledMessage={gate.enabled ? null : payrollItems.length ? gate.reason : null} />
       <ReviewQueue items={reviewItems} loads={loadOptions} drivers={driverOptions} />
       <RecentlyFiled items={filedItems} />
 

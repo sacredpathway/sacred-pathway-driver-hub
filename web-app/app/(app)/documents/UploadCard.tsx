@@ -24,7 +24,10 @@ import {
 import { UPLOAD_TYPE_CHOICES } from "./constants";
 import { documentTypeLabel } from "@/lib/documents/taxonomy";
 
-type ProcessingRow = { id: string; name: string; status: "queued" | "reading" | "done" | "review" | "failed"; message: string };
+type ProcessingRow = {
+  id: string; name: string; status: "queued" | "reading" | "done" | "review" | "failed"; message: string;
+  payroll?: { state: string; message: string; settlementId?: string };
+};
 
 export default function UploadCard({
   loads,
@@ -66,6 +69,7 @@ export default function UploadCard({
                 ...row,
                 status: res.state === "auto_routed" ? "done" : res.state === "failed" ? "failed" : "review",
                 message: res.message,
+                ...(res.payroll ? { payroll: res.payroll } : {}),
               }
             : { ...row, status: "failed", message: res.error };
         } catch {
@@ -110,8 +114,9 @@ export default function UploadCard({
         <div>
           <h2 className="text-base font-semibold text-sp-textPrimary">Upload documents</h2>
           <p className="mt-1 text-xs text-sp-textSecondary">
-            Rate cons, BOLs, PODs, fuel/lumper/toll/repair receipts, CDLs, medical cards, MVRs.
-            Each file is read automatically; anything uncertain waits for your review.
+            Rate cons, BOLs, PODs, fuel/lumper/toll/repair receipts, scale tickets, detention proof, CDLs, medical cards, MVRs.
+            Each file is read and filed automatically, and a payroll draft is prepared when everything checks out.
+            Anything uncertain waits for your review — nothing is ever paid automatically.
           </p>
         </div>
       </header>
@@ -134,7 +139,7 @@ export default function UploadCard({
       {processing.length > 0 && (
         <ul className="mb-3 space-y-1 rounded-lg bg-sp-cardLight px-3 py-2 text-xs" aria-live="polite">
           {processing.map((r) => (
-            <li key={r.id} className="flex items-baseline justify-between gap-3">
+            <li key={r.id} data-testid="upload-row" data-state={r.status} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <span className="truncate text-sp-textPrimary">{r.name}</span>
               <span
                 className={
@@ -149,6 +154,19 @@ export default function UploadCard({
               >
                 {r.message}
               </span>
+              {r.payroll && (
+                <span data-testid="upload-payroll" data-state={r.payroll.state} className={"basis-full text-[11px] " + (r.payroll.state === "held" || r.payroll.state === "error" ? "text-sp-warning" : "text-sp-success")}>
+                  {r.payroll.message}
+                  {r.payroll.settlementId && (
+                    <>
+                      {" "}
+                      <a href={`/settlements/${r.payroll.settlementId}/statement`} className="font-semibold text-sp-gold hover:underline">Open paystub</a>
+                      {" · "}
+                      <a href={`/settlements/${r.payroll.settlementId}`} className="text-sp-gold hover:underline">Settlement</a>
+                    </>
+                  )}
+                </span>
+              )}
             </li>
           ))}
         </ul>

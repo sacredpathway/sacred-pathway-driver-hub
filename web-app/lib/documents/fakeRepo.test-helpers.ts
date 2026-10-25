@@ -144,6 +144,11 @@ export function createFakeRepo(st: FakeState, ownerId = OWNER, now = new Date("2
       const d = own(st.docs.get(id));
       return d ? structuredClone(d) : null;
     },
+    async listWaitingDocuments(limit) {
+      return [...st.docs.values()]
+        .filter((d) => d.profile_id === ownerId && d.review_status === "needs_review" && d.load_id === null)
+        .slice(0, limit).map((d) => structuredClone(d));
+    },
     async claimExtraction(id, staleBeforeIso) {
       const d = own(st.docs.get(id));
       if (!d || d.review_status !== null) return false;

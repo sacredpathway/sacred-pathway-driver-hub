@@ -40,6 +40,34 @@ import { isCanonicalDocumentType } from "@/lib/documents/taxonomy";
 import { FIELD_SPECS } from "@/lib/documents/extraction";
 import type { RoutingRecord } from "@/lib/documents/types";
 import { UPLOAD_TYPE_CHOICES } from "./constants";
+import { createSettlementAction, saveSettlementAction } from "@/app/(app)/settlements/actions";
+import { afterFiling, runAutoPayroll, summary, type AutopaySummary } from "@/lib/autopay/server";
+
+const SETTLEMENT_ACTIONS = { createSettlementAction, saveSettlementAction };
+
+function revalidatePayroll() {
+  revalidatePath("/settlements");
+  revalidatePath("/payroll");
+  revalidatePath("/dashboard");
+}
+
+/** Payroll effect of a freshly filed document, plus anything that was waiting for its load. */
+async function payrollAfterFiling(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: { id: string; email?: string | null },
+  documentId: string,
+): Promise<AutopaySummary | undefined> {
+  try {
+    const { data } = await supabase.from("documents").select("load_id").eq("id", documentId).eq("profile_id", user.id).maybeSingle();
+    const loadId = ((data as { load_id?: string | null } | null)?.load_id) ?? null;
+    const r = await afterFiling(supabase, { id: user.id, email: user.email ?? null }, documentId, SETTLEMENT_ACTIONS, loadId);
+    revalidatePayroll();
+    return r.own.state === "off" || r.own.state === "skipped" ? undefined : summary(r.own);
+  } catch {
+    // Filing already succeeded; payroll can be retried from the document.
+    return undefined;
+  }
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -208,7 +236,7 @@ export async function uploadDocumentsAction(
 // =============================================================================
 
 export type ProcessActionResult =
-  | { ok: true; state: ProcessOutcome["state"]; message: string }
+  | { ok: true; state: ProcessOutcome["state"]; message: string; payroll?: AutopaySummary }
   | { ok: false; error: string };
 
 function outcomeMessage(o: ProcessOutcome): string {
@@ -225,9 +253,24 @@ export async function processDocumentAction(documentId: string): Promise<Process
   if (!UUID_RE.test(documentId ?? "")) return { ok: false, error: "Invalid document id." };
   const { supabase, user } = await signedIn();
   if (!user) return { ok: false, error: "Not signed in." };
-  const outcome = await processDocument(createDocumentRepo(supabase, user.id), documentId.toLowerCase());
+  const id = documentId.toLowerCase();
+  const outcome = await processDocument(createDocumentRepo(supabase, user.id), id);
+  const payroll = outcome.state === "auto_routed" ? await payrollAfterFiling(supabase, user, id) : undefined;
   revalidatePath("/documents");
-  return { ok: true, state: outcome.state, message: outcomeMessage(outcome) };
+  return { ok: true, state: outcome.state, message: outcomeMessage(outcome), ...(payroll ? { payroll } : {}) };
+}
+
+/** "Try payroll again" — re-runs the automatic payroll step for one filed document. */
+export async function runAutoPayrollAction(documentId: string): Promise<ReviewActionState> {
+  if (!UUID_RE.test(documentId ?? "")) return { ok: false, message: "Invalid document id." };
+  const { supabase, user } = await signedIn();
+  if (!user) return { ok: false, message: "Not signed in." };
+  const o = await runAutoPayroll(supabase, { id: user.id, email: user.email ?? null }, documentId.toLowerCase(), SETTLEMENT_ACTIONS);
+  revalidatePath("/documents");
+  revalidatePayroll();
+  if (o.state === "off") return { ok: false, message: "Automatic payroll drafts are not enabled here." };
+  if (o.state === "skipped") return { ok: true, message: "Nothing to do for payroll." };
+  return { ok: o.state !== "held" && o.state !== "error", message: summary(o).message };
 }
 
 // =============================================================================
@@ -285,10 +328,12 @@ export async function approveDocumentAction(documentId: string): Promise<ReviewA
   const ctx = await reviewRepo();
   if (!ctx) return { ok: false, message: "Not signed in." };
   const res = await approveDocument(ctx.repo, documentId.toLowerCase());
+  const payroll = res.ok ? await payrollAfterFiling(ctx.supabase, ctx.user, documentId.toLowerCase()) : undefined;
   revalidatePath("/documents");
   revalidatePath("/expenses");
   revalidatePath("/loads");
-  return res.ok ? { ok: true, message: "Approved and filed." } : { ok: false, message: res.error };
+  if (!res.ok) return { ok: false, message: res.error };
+  return { ok: true, message: payroll?.message ? `Approved and filed. ${payroll.message}` : "Approved and filed." };
 }
 
 export async function dismissDocumentAction(documentId: string): Promise<ReviewActionState> {
@@ -366,8 +411,20 @@ export async function createLoadFromDocumentAction(
       return { ok: false, message: `Load #${existing[0].load_number} already exists — choose it instead of creating a duplicate.` };
     }
   }
-  // Driver / truck / trailer pickers are not offered here; never accept them.
-  const row = { ...payload, driver_id: null, truck_id: null, trailer_id: null, profile_id: user.id };
+  // Driver: only one the owner confirmed in the form (pre-selected from the
+  // driver printed on the document), and only one of this account's drivers.
+  let driverId: string | null = null;
+  try {
+    driverId = uuidOrNull(s(formData, "driver_id"));
+  } catch {
+    return { ok: false, message: "Invalid driver." };
+  }
+  if (driverId) {
+    const { data: drv } = await supabase.from("drivers").select("id").eq("id", driverId).eq("profile_id", user.id).maybeSingle();
+    if (!drv) return { ok: false, message: "That driver isn't in your account." };
+  }
+  // Truck / trailer pickers are not offered here; never accept them.
+  const row = { ...payload, driver_id: driverId, truck_id: null, trailer_id: null, profile_id: user.id };
   const { data: load, error } = await supabase
     .from("loads").insert(assertLoadColumns(row, "createLoadFromDocumentAction")).select("id").single();
   if (error || !load) return { ok: false, message: error?.message ?? "Could not create the load." };
@@ -392,9 +449,12 @@ export async function createLoadFromDocumentAction(
     action: "created",
     metadata: { label: `Load ${payload.load_number ? `#${payload.load_number}` : load.id.slice(0, 8)} created from a rate confirmation`, document_id: doc.id, amount: payload.total_revenue },
   });
+  // The load exists now: draft its payroll and file paperwork that was waiting for it.
+  const payroll = await payrollAfterFiling(supabase, user, doc.id);
   revalidatePath("/documents");
   revalidatePath("/loads");
   revalidatePath("/dashboard");
+  if (payroll?.settlementId) redirect(`/settlements/${payroll.settlementId}/statement?from=document`);
   redirect(`/loads/${load.id}?created=1`);
 }
 

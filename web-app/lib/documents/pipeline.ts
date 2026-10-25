@@ -70,6 +70,8 @@ export interface DocumentRepo {
   insertDriverDocument(doc: AutomationDocument, draft: ComplianceDraft): Promise<InsertResult<Record<string, unknown>>>;
   getDriverDocumentBySource(documentId: string): Promise<Record<string, unknown> | null>;
   deleteDriverDocumentIfUnchanged(id: string, documentId: string, snapshot: Record<string, unknown>): Promise<boolean>;
+  /** Documents of this account waiting in review (newest first), for re-matching after a load appears. */
+  listWaitingDocuments(limit: number): Promise<AutomationDocument[]>;
   /** True when the document is on a line of an approved/paid settlement. Throws when the check can't be completed. */
   documentInFinalizedSettlement(documentId: string): Promise<boolean>;
   log(entityId: string, action: string, metadata: Record<string, unknown>): Promise<void>;
@@ -482,6 +484,10 @@ export async function undoAction(repo: DocumentRepo, id: string, index: number):
   if (a.undone_at) return { ok: false, error: "Already undone." };
 
   if (a.kind === "attach_load") {
+    // A document already turned into a settlement line stays with its load.
+    if (d.settlement_id) {
+      return { ok: false, error: "This document is on a settlement. Remove the load from that settlement first; nothing undone." };
+    }
     // Fail closed: if the settlement check can't run, nothing is undone.
     let finalized: boolean;
     try {
@@ -523,4 +529,62 @@ export async function undoAction(repo: DocumentRepo, id: string, index: number):
   await repo.saveRouting(d.id, "needs_review", record, true);
   await repo.log(d.id, "undone", { label: `Document action undone: ${a.kind.replace(/_/g, " ")}`, document_id: d.id, target_id: a.target_id });
   return { ok: true };
+}
+
+// -----------------------------------------------------------------------------
+//  Documents that arrived before their load (out-of-order uploads)
+// -----------------------------------------------------------------------------
+
+/** Review reasons that only mean "the load wasn't there yet". */
+const WAITING_FOR_LOAD: ReadonlySet<ReviewReason> = new Set<ReviewReason>(["load_not_found", "no_load_identifier", "rate_con_no_load"]);
+
+/**
+ * After a load is created or a rate confirmation is filed, re-decide the
+ * documents that were waiting ONLY because no load carried their number (a
+ * BOL/POD/receipt uploaded before the rate con). Same rules as the first
+ * pass: anything uncertain stays in review. Human-corrected documents are
+ * never touched. Returns the ids that were filed automatically.
+ */
+export async function rerouteWaitingForLoad(repo: DocumentRepo, loadId: string): Promise<string[]> {
+  const load = await repo.getLoad(loadId);
+  if (!load || load.profile_id !== repo.ownerId) return [];
+  const key = normalizeIdentifier(load.load_number);
+  if (!key) return [];
+  const filed: string[] = [];
+  for (const doc of await repo.listWaitingDocuments(200)) {
+    if (doc.profile_id !== repo.ownerId || doc.review_status !== "needs_review" || !doc.routing) continue;
+    if (doc.duplicate_of || doc.load_id) continue;
+    if (doc.routing.corrections && Object.keys(doc.routing.corrections).length > 0) continue;
+    if (liveActions(doc.routing).length > 0) continue;
+    const reasons = doc.routing.reasons ?? [];
+    if (reasons.length === 0 || !reasons.every((r) => WAITING_FOR_LOAD.has(r))) continue;
+    const { extraction } = effectiveExtraction(doc.extracted_data, null);
+    const f = extraction.fields as Record<string, unknown>;
+    const ids = [normalizeIdentifier(f.load_number), normalizeIdentifier(f.bol_number)];
+    if (!ids.includes(key)) continue;
+
+    const decision = await computeDecision(repo, doc);
+    const record = newRecord(repo, decision, doc.routing, event(repo, "automation", "rematched_after_load", decision.decision));
+    if (decision.decision !== "auto" || !decision.proposed) {
+      await repo.saveRouting(doc.id, "needs_review", record, false);
+      continue;
+    }
+    const res = await applyProposal(repo, doc, decision.proposed, "automatic");
+    if (!res.ok) {
+      record.decision = "review";
+      record.reasons = [res.reason];
+      record.history.push(event(repo, "automation", "apply_failed", res.detail));
+      await repo.saveRouting(doc.id, "needs_review", record, false);
+      continue;
+    }
+    record.applied = [...record.applied, res.action];
+    record.history.push(event(repo, "automation", `applied:${res.action.kind}`, res.action.target_id));
+    await repo.saveRouting(doc.id, "auto_routed", record, false);
+    await repo.log(doc.id, "auto_routed", {
+      label: `Document filed after its load appeared: ${res.action.kind.replace(/_/g, " ")}`,
+      document_id: doc.id, action: res.action.kind, target_table: res.action.target_table, target_id: res.action.target_id, mode: "automatic",
+    });
+    filed.push(doc.id);
+  }
+  return filed;
 }

@@ -48,6 +48,8 @@ export interface ConfirmationRecord {
   load_id: string;
   corrections: Correction[];
   acknowledged: string[];
+  /** "automatic" = drafted by lib/autopay without a click (no warnings, no corrections). */
+  mode?: "human" | "automatic";
 }
 
 export interface ClaimHandle { claimId: string; claimToken: string }
@@ -85,6 +87,7 @@ export async function confirmPayrollDraft(
   documentId: string,
   decisions: ProposalDecisions,
   clientToday?: string,
+  opts: { mode?: "human" | "automatic" } = {},
 ): Promise<ConfirmResult> {
   if (!deps.gate.enabled) return { ok: false, code: "confirm_disabled", error: GATE_MESSAGE[deps.gate.reason] };
 
@@ -134,6 +137,7 @@ export async function confirmPayrollDraft(
       .filter((f) => f.evidence === "corrected_by_owner")
       .map((f) => ({ field: f.field, extracted: f.readAs ?? null, saved: f.extracted, source: "manual" as const })),
     acknowledged: proposal.warnings.map((w) => w.key),
+    mode: opts.mode ?? "human",
   };
 
   // 4b. Atomic claim: nothing is written to payroll unless this succeeds.
