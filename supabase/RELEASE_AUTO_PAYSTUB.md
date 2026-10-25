@@ -104,7 +104,7 @@ select md5(pg_get_functiondef(p.oid)), p.prosecdef,
 ## Step 6 🔒 — Edge Function v22: staging (no key = no cost), then production
 Package + checksums: `supabase/deploy/extract-document-v22/`.
 **6a Staging, no OpenAI key (zero cost):** `supabase functions deploy extract-document --project-ref aatkirzwuuegurdlmcpl --no-verify-jwt`
-(after `sha256sum -c MANIFEST.v22.sha256`). Verify with a synthetic staging account: OPTIONS 200; no JWT → 401
+(after `shasum -a 256 -c MANIFEST.v22.sha256`). Verify with a synthetic staging account: OPTIONS 200; no JWT → 401
 `AUTH_EXPIRED`; random UUID → `UNKNOWN_SCAN_ERROR` (stage `row_lookup`); other account's document → `AUTH_EXPIRED`
 (stage `profile_mismatch`), no row change; own synthetic document → `OPENAI_API_KEY not set` and the row marked failed
 (proves auth, ownership and storage download all work up to the model step, no charge).

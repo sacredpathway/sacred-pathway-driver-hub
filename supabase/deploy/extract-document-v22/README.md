@@ -36,7 +36,7 @@ download before it reads `OPENAI_API_KEY`, so those paths can be accepted at zer
 
 ```bash
 cd supabase/functions
-sha256sum -c ../deploy/extract-document-v22/MANIFEST.v22.sha256
+shasum -a 256 -c ../deploy/extract-document-v22/MANIFEST.v22.sha256
 # (optional, only for the paid live test) staging key:
 # supabase secrets set --project-ref aatkirzwuuegurdlmcpl OPENAI_API_KEY=<staging key>
 supabase functions deploy extract-document --project-ref aatkirzwuuegurdlmcpl --no-verify-jwt
@@ -49,7 +49,7 @@ supabase functions deploy extract-document --project-ref aatkirzwuuegurdlmcpl --
 ```bash
 git worktree add /tmp/edge-v21 3638672
 cd /tmp/edge-v21/supabase/functions
-sha256sum -c /path/to/repo/supabase/deploy/extract-document-v22/MANIFEST.v21-rollback.sha256
+shasum -a 256 -c /path/to/repo/supabase/deploy/extract-document-v22/MANIFEST.v21-rollback.sha256
 supabase functions deploy extract-document --project-ref rmzqxsfhjqrshhdjzhze --no-verify-jwt
 ```
 
