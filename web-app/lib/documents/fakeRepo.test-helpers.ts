@@ -4,6 +4,7 @@
 
 import type { DocumentRepo, ExtractorResult, InsertResult } from "./pipeline";
 import { sanitizeExtraction } from "./extraction";
+import { sanitizePayrollExtraction } from "./payrollExtraction";
 import type {
   AutomationDocument,
   ComplianceDraft,
@@ -36,6 +37,8 @@ export interface FakeState {
   /** What the "Edge Function" returns for a document id (raw model JSON). */
   modelOutput: Map<string, unknown>;
   extractorFails: Map<string, string>;
+  /** when true the fake "Edge Function" answers with the v3 payroll profile */
+  v3?: boolean;
 }
 
 export function newState(): FakeState {
@@ -166,7 +169,8 @@ export function createFakeRepo(st: FakeState, ownerId = OWNER, now = new Date("2
         st.docs.set(id, { ...d, status: "failed", error_message: fail });
         return { ok: false, code: "UNKNOWN_SCAN_ERROR", message: fail };
       }
-      storeExtraction(st, id, st.modelOutput.get(id) ?? {}, hint);
+      if (st.v3) storeExtractionV3(st, id, toV3Raw(st.modelOutput.get(id) ?? {}), hint);
+      else storeExtraction(st, id, st.modelOutput.get(id) ?? {}, hint);
       return { ok: true };
     },
     async markExtractionFailed(id, message) {
@@ -270,6 +274,30 @@ export function createFakeRepo(st: FakeState, ownerId = OWNER, now = new Date("2
 }
 
 // ----------------------------------------------------------- model outputs --
+
+/** Flat v2-style model JSON -> v3 shape ({value, page, source_text, confidence} per field). */
+export function toV3Raw(flat: unknown): Record<string, unknown> {
+  const o = (flat && typeof flat === "object" ? flat : {}) as Record<string, unknown>;
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k === "document_type" || k === "confidence" || k === "notes") continue;
+    fields[k] = { value: v, page: 1, source_text: String(v), confidence: o.confidence ?? "high" };
+  }
+  return { document_type: o.document_type, confidence: o.confidence, page_count: 1, fields, notes: o.notes ?? "" };
+}
+
+/** Simulates Edge Function v22 writing a v3 (payroll profile) extraction. */
+export function storeExtractionV3(st: FakeState, id: string, raw: unknown, typeHint: string | null = null) {
+  const doc = st.docs.get(id)!;
+  const s = sanitizePayrollExtraction(raw);
+  st.docs.set(id, {
+    ...doc,
+    status: "processed",
+    extraction_version: "v3",
+    document_type: s.stored_document_type,
+    extracted_data: { ...s, parse_stage: "strict", type_hint: typeHint },
+  });
+}
 
 export const RATE_CON = (over: Record<string, unknown> = {}) => ({
   document_type: "rate_confirmation",

@@ -350,9 +350,11 @@ export async function retryDocumentAction(documentId: string): Promise<ReviewAct
   const ctx = await reviewRepo();
   if (!ctx) return { ok: false, message: "Not signed in." };
   const res = await retryDocument(ctx.repo, documentId.toLowerCase());
+  const payroll = res.state === "auto_routed" ? await payrollAfterFiling(ctx.supabase, ctx.user, documentId.toLowerCase()) : undefined;
   revalidatePath("/documents");
   if (res.state === "refused") return { ok: false, message: res.message };
-  return { ok: res.state !== "failed", message: outcomeMessage(res) };
+  const msg = outcomeMessage(res);
+  return { ok: res.state !== "failed", message: payroll?.message ? `${msg} ${payroll.message}` : msg };
 }
 
 export async function undoDocumentAction(documentId: string, index: number): Promise<ReviewActionState> {

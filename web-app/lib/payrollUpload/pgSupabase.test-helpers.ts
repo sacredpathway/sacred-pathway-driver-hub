@@ -98,7 +98,7 @@ async function selectList(pool: PgPoolLike, table: string, cols: string): Promis
 }
 
 class Builder implements PromiseLike<Result> {
-  private op: "select" | "update" | "insert" = "select";
+  private op: "select" | "update" | "insert" | "delete" = "select";
   private cols = "*";
   private returning: string | null = null;
   private where: string[] = [];
@@ -119,6 +119,7 @@ class Builder implements PromiseLike<Result> {
   select(cols = "*") { if (this.op === "select") this.cols = cols; else this.returning = cols; return this; }
   update(patch: Record<string, unknown>) { this.op = "update"; this.patch = patch; return this; }
   insert(rows: Record<string, unknown> | Record<string, unknown>[]) { this.op = "insert"; this.patch = rows; return this; }
+  delete() { this.op = "delete"; return this; }
   eq(c: string, v: unknown) { return this.f(`t.${q(c)} = ${this.p(v)}`); }
   neq(c: string, v: unknown) { return this.f(`t.${q(c)} is distinct from ${this.p(v)}`); }
   gt(c: string, v: unknown) { return this.f(`t.${q(c)} > ${this.p(v)}`); }
@@ -135,7 +136,30 @@ class Builder implements PromiseLike<Result> {
     if (op === "is" && v === null) return this.f(`t.${q(c)} is not null`);
     throw new Error(`pgSupabase: unsupported not(${op})`);
   }
-  or(): never { throw new Error("pgSupabase: or() is not supported (not on the tested path)"); }
+  /** PostgREST logic tree: "a.eq.1,and(b.lt.2,c.is.null)" (eq / neq / lt / gt / in / is). */
+  or(expr: string) { return this.f(`(${this.logic(expr, "or")})`); }
+  private logic(expr: string, join: "or" | "and"): string {
+    const parts: string[] = [];
+    let depth = 0, cur = "";
+    for (const ch of expr) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (ch === "," && depth === 0) { parts.push(cur); cur = ""; } else cur += ch;
+    }
+    if (cur) parts.push(cur);
+    const sql = parts.map((p) => {
+      const m = /^(and|or)\((.*)\)$/.exec(p.trim());
+      if (m) return `(${this.logic(m[2], m[1] as "or" | "and")})`;
+      const c = /^([a-z_]+)\.(eq|neq|lt|gt|lte|gte|in|is)\.(.*)$/.exec(p.trim());
+      if (!c) throw new Error(`pgSupabase: unsupported or() item ${JSON.stringify(p)}`);
+      const [, col, op, val] = c;
+      if (op === "is") return val === "null" ? `t.${q(col)} is null` : `t.${q(col)} is ${val === "true" ? "true" : "false"}`;
+      if (op === "in") return `t.${q(col)}::text = any(${this.p(val.replace(/^\(|\)$/g, "").split(","))}::text[])`;
+      const sym = { eq: "=", neq: "<>", lt: "<", gt: ">", lte: "<=", gte: ">=" }[op as "eq"];
+      return `t.${q(col)} ${sym} ${this.p(val)}`;
+    });
+    return sql.join(` ${join} `);
+  }
   order(c: string, o?: { ascending?: boolean }) { this.orderBy.push(`t.${q(c)} ${o?.ascending === false ? "desc" : "asc"}`); return this; }
   limit(n: number) { this.lim = n; return this; }
   maybeSingle() { this.mode = "maybe"; return this; }
@@ -147,6 +171,10 @@ class Builder implements PromiseLike<Result> {
     if (this.op === "select") {
       const { list, joins } = await selectList(this.pool, this.table, this.cols);
       return `select coalesce(json_agg(x), '[]'::json) as j from (select ${list} from public.${q(this.table)} t ${joins} ${where} ${tail}) x`;
+    }
+    if (this.op === "delete") {
+      const ret = this.returning ? (await selectList(this.pool, this.table, this.returning)).list : "t.id";
+      return `with t as (delete from public.${q(this.table)} t ${where} returning t.*) select coalesce(json_agg(x), '[]'::json) as j from (select ${ret} from t) x`;
     }
     if (this.op === "update") {
       const sets = Object.entries(this.patch as Record<string, unknown>).map(([k, v]) => `${q(k)} = ${this.p(v)}`);
@@ -203,18 +231,29 @@ async function rpc(pool: PgPoolLike, uid: string | null, name: string, args: Rec
   return runAs(pool, uid, sql, params);
 }
 
-export interface FakeStorage { objects: Map<string, { size: number; type: string }> }
+export interface FakeStorage { objects: Map<string, { size: number; type: string; text?: string }> }
+export type FakeFunctions = (name: string, body: Record<string, unknown>, uid: string | null) => Promise<{ data: unknown; error: unknown }>;
 
-export function pgSupabase(pool: PgPoolLike, user: { id: string; email: string } | null, storage: FakeStorage = { objects: new Map() }) {
+export function pgSupabase(pool: PgPoolLike, user: { id: string; email: string } | null, storage: FakeStorage = { objects: new Map() }, functions?: FakeFunctions) {
   const uid = user?.id ?? null;
   return {
     auth: { getUser: async () => ({ data: { user } }) },
     from: (table: string) => new Builder(pool, uid, table),
     rpc: (name: string, args?: Record<string, unknown>) => rpc(pool, uid, name, args),
+    functions: {
+      invoke: async (name: string, o?: { body?: Record<string, unknown> }) => {
+        if (!functions) return { data: null, error: { message: "functions not configured" } };
+        return functions(name, o?.body ?? {}, uid);
+      },
+    },
     storage: {
       from: (bucket?: string) => ({
         bucket: bucket ?? "documents",
-        upload: async (path: string, file: Blob, o?: { contentType?: string }) => { storage.objects.set(path, { size: file.size, type: o?.contentType ?? file.type }); return { error: null }; },
+        upload: async (path: string, file: Blob, o?: { contentType?: string }) => {
+          if (storage.objects.has(path)) return { error: { message: "The resource already exists" } };
+          storage.objects.set(path, { size: file.size, type: o?.contentType ?? file.type, text: await file.text().catch(() => "") });
+          return { error: null };
+        },
         remove: async (paths: string[]) => { paths.forEach((p) => storage.objects.delete(p)); return { error: null }; },
         createSignedUrl: async (path: string) => ({ data: { signedUrl: `local-test://${path}` }, error: null }),
       }),

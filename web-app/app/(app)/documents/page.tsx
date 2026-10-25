@@ -30,7 +30,7 @@ import { ResumeProcessing } from "./ResumeProcessing";
 import { autopayOf, autoGate } from "@/lib/autopay/wire";
 import { matchDriver } from "@/lib/documents/matching";
 import { sanitizePayrollExtraction } from "@/lib/documents/payrollExtraction";
-import { resumeCandidates } from "@/lib/documents/resume";
+import { payrollResumeCandidates, resumeCandidates } from "@/lib/documents/resume";
 
 interface Filters {
   type?: string;
@@ -39,6 +39,8 @@ interface Filters {
   from?: string;
   to?: string;
 }
+
+const gateOn = () => autoGate(process.env).enabled;
 
 export default async function DocumentsPage({
   searchParams,
@@ -158,6 +160,7 @@ export default async function DocumentsPage({
 
   // Interrupted uploads: website files never read, or stuck "processing".
   const resumeIds = resumeCandidates(docsAll as never);
+  const payrollResumeIds = gateOn() ? payrollResumeCandidates(docsAll as never) : [];
 
   // What automatic payroll did with each document.
   const gate = autoGate(process.env);
@@ -274,7 +277,7 @@ export default async function DocumentsPage({
         <UploadCard loads={loads} />
       </div>
 
-      <ResumeProcessing ids={resumeIds} />
+      <ResumeProcessing ids={resumeIds} payrollIds={payrollResumeIds} />
       <PayrollActivity items={payrollItems} enabledMessage={gate.enabled ? null : payrollItems.length ? gate.reason : null} />
       <ReviewQueue items={reviewItems} loads={loadOptions} drivers={driverOptions} />
       <RecentlyFiled items={filedItems} />

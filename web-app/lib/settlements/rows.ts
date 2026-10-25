@@ -253,6 +253,9 @@ export function deductionToRow(d: Deduction, settlementId: string, profileId: st
     sort_order: d.sortOrder,
   };
   if (withCustom) row.custom_category_id = d.customCategoryId;
+  // Source document (receipt) link: sent only when set, so every existing
+  // payload is byte-identical; the database writes it on insert only.
+  if (d.documentId) row.document_id = d.documentId;
   return row;
 }
 
