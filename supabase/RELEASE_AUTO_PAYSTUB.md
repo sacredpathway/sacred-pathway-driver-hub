@@ -49,7 +49,7 @@ each step's iPhone smoke check is the device verification.
 accounts; F3 leaked-password protection). Uses `scripts/rotate_review_credentials.sh` (hidden prompts only).
 **Verify:** the SQL in that file: `updated_at` after rotation (or `banned_until` set) for all three, sessions 0; App Store
 Connect review sign-in updated if it uses a rotated account; dashboard shows leaked-password protection ON.
-**Rollback:** rotate again / `… enable <id>`.
+**Rollback:** rotate again / `… enable <id> <email>`.
 
 ## Step 2 🔒 — Push, PR, CI
 **Do:**

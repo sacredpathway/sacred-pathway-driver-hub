@@ -58,6 +58,8 @@ jobs:
             echo "checking $f"
             bash -n "$f"
           done
+      - name: Credential-rotation script safety test (offline, local mock server)
+        run: python3 scripts/test_rotate_review_credentials.py
 
   guardrails:
     name: No Anthropic / Claude refs in Swift

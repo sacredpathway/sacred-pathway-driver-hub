@@ -33,23 +33,35 @@ sensitive file names (`.env`, `.p8`, `.p12`, `.pem`, keystores, `GoogleService-I
 
 ## Rotation procedure (owner-run, in this order)
 
-Uses `scripts/rotate_review_credentials.sh`: secrets are typed at hidden prompts, never passed as
-arguments or env vars, kept in a mode-600 temp file deleted on exit, and never printed.
+Uses `scripts/rotate_review_credentials.sh` (verified 2026-10-25 by `scripts/test_rotate_review_credentials.py`,
+54/54, plus 4 deliberately broken copies that the test catches):
+- the service-role key and the new password are typed at hidden prompts — never arguments, env vars,
+  terminal output, shell history, or any process's argv/env (sampled while curl runs);
+- they reach curl only through mode-600 files in a private temp dir, removed on exit, Ctrl-C or error;
+- the password is sent byte-for-byte (spaces, quotes, `\`, `$`, backtick, unicode);
+- **before writing**, it reads the account by id and refuses unless its email equals the email you pass,
+  then asks you to type the email again; anon/publishable keys are refused before any request;
+- works with a legacy `service_role` JWT or a new `sb_secret_…` key; bash 3.2 (macOS) compatible, shellcheck clean.
 
-1. **Check which account App Store Connect uses** (App Store Connect → the app → 2.3.6 → App Review
-   Information → Sign-in). Project notes (2026-10-06) say 2.3.6 uses `+review235`; confirm.
+1. **Check which account App Store Connect uses** (App Store Connect → Sacred Pathway Driver Hub → the
+   newest version → App Review Information → Sign-in information). Project notes: 2.3.5 and earlier used
+   `+appreview`; 2.3.6 was set to `+review235` (2026-10-06, with an open note about switching back for fuller
+   data). `+review235` (`5e7f73a8-…`) was never exposed and needs no change. If any version still in
+   "Prepare for Submission" / "Waiting for Review" / "In Review" lists `+appreview`, update its password there
+   right after rotation.
 2. **F1 — rotate `+appreview`.** Generate a new 20+ char password in your password manager, then:
    ```bash
    cd ~/Developer/sacred-pathway-driver-hub
-   scripts/rotate_review_credentials.sh rotate 5150a545-5962-463d-b688-3370c6b55c8e
+   git checkout feature/auto-paystub        # the script exists only on this branch (tree is clean)
+   scripts/rotate_review_credentials.sh rotate 5150a545-5962-463d-b688-3370c6b55c8e demarquishinton+appreview@gmail.com
    ```
    Expect `HTTP 200` and `updated_at` = now. If App Store Connect uses this account, paste the new
    password there **in the same sitting** (a review in progress would otherwise fail to sign in).
-   If it is no longer used for review: `… disable 5150a545-5962-463d-b688-3370c6b55c8e` instead.
+   If it is no longer used for review: `… disable 5150a545-5962-463d-b688-3370c6b55c8e demarquishinton+appreview@gmail.com` instead.
 3. **F2 — dispatch demo accounts.** If no app review uses them: disable (reversible):
    ```bash
-   scripts/rotate_review_credentials.sh disable 0357bef0-e75a-4142-a56b-d0749c3c6a2e
-   scripts/rotate_review_credentials.sh disable bb000000-0000-4000-8000-000000000002
+   scripts/rotate_review_credentials.sh disable 0357bef0-e75a-4142-a56b-d0749c3c6a2e dispatcher.demo@sacredpathwaydispatch.com
+   scripts/rotate_review_credentials.sh disable bb000000-0000-4000-8000-000000000002 driver.demo@sacredpathwaydispatch.com
    ```
    Otherwise `rotate` each and update the review notes that reference them.
 4. **F3** — Dashboard → Authentication → Providers/Policies → Password security → enable leaked-password protection.
@@ -67,9 +79,13 @@ Not recommended: rewriting public Git history or `schema_migrations` text. Once 
 values are useless, and both rewrites carry real risk (a force-push to a public repo, a write to
 production history).
 
+### Local copies of the old password (no action needed after rotation)
+- Your Mac's checked-out branch (`feature/smart-payroll-upload`) still has the old password in
+  `AppStoreConnect_Fields.md` on disk; `feature/auto-paystub` has it removed. After rotation it is useless.
+
 ## Rollback
 - Rotation: rotate again (there is no "restore old password"; use the password manager entry).
-- Disable: `scripts/rotate_review_credentials.sh enable <id>`.
+- Disable: `scripts/rotate_review_credentials.sh enable <id> <email>`.
 
 ## Repo visibility (F4) — owner decision
 Making the repo private does **not** affect the App Store legal URLs (served by GitHub Pages from
