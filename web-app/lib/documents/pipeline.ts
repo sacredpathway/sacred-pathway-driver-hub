@@ -77,11 +77,15 @@ export interface DocumentRepo {
   autoCreateLoads?: boolean;
   /** The signed-in carrier's own identity (profile), for "is this our load?". */
   carrierIdentity?(): Promise<CarrierIdentity | null>;
-  /** Insert a load for this account (only from decideAutoCreateLoad). */
-  /** guarded = the database serialised it (migration #5): `created` false means the number already existed. */
-  createLoad?(row: LoadDraftRow): Promise<{ ok: true; id: string; created: boolean; guarded: boolean } | { ok: false; message: string }>;
-  /** Remove a load THIS automation just created and lost a race for. False if anything references it. */
-  deleteAutoCreatedLoad?(id: string): Promise<boolean>;
+  /**
+   * Insert a load for this account (only from decideAutoCreateLoad).
+   * Creates the load through sph_load_create_verified (migration #5), which
+   * serialises "create unless this carrier already has the number" in the
+   * database. `created` false = the number already existed (another upload
+   * won). `unavailable` = the function is not installed: nothing is written
+   * and automatic creation does not happen (no unguarded fallback).
+   */
+  createLoad?(row: LoadDraftRow): Promise<{ ok: true; id: string; created: boolean } | { ok: false; message: string; unavailable?: boolean }>;
   /** Documents of this account waiting in review (newest first), for re-matching after a load appears. */
   listWaitingDocuments(limit: number): Promise<AutomationDocument[]>;
   /** True when the document is on a line of an approved/paid settlement. Throws when the check can't be completed. */
@@ -642,31 +646,23 @@ async function tryAutoCreateLoad(repo: DocumentRepo, doc: AutomationDocument, re
     return { state: "needs_review", routing: record };
   }
 
+  // The database decides (sph_load_create_verified, migration #5): one
+  // transaction per carrier + normalised load number under an advisory lock,
+  // so two uploads of the same new load yield exactly one load. There is no
+  // application-side fallback: without the function nothing is created.
   const ins = await repo.createLoad(d.row);
   if (!ins.ok) {
-    record.history.push(event(repo, "automation", "auto_create_load_failed", ins.message));
+    if (ins.unavailable) {
+      (record as RoutingRecord & { auto_create?: unknown }).auto_create = { eligible: true, reasons: ["safeguard_missing"] };
+      record.history.push(event(repo, "automation", "auto_create_load_unavailable", AUTO_CREATE_REASON_TEXT.safeguard_missing));
+    } else {
+      record.history.push(event(repo, "automation", "auto_create_load_failed", ins.message));
+    }
     await repo.saveRouting(doc.id, "needs_review", record, false);
     return { state: "needs_review", routing: record };
   }
-  // Two uploads of the same new load at the same moment: both may insert.
-  // Every racer re-reads and keeps the SAME winner (lowest id); a loser removes
-  // the row it just created and files against the winner.
-  let loadId = ins.id;
+  const loadId = ins.id;
   const createdHere = ins.created;
-  const same = ins.guarded ? [] : (await repo.findLoadCandidates([key!])).filter((l) => l.profile_id === repo.ownerId && normalizeIdentifier(l.load_number) === key);
-  if (!ins.guarded && same.length > 1) {
-    const winner = [...same].sort((a, b) => a.id.localeCompare(b.id))[0];
-    if (winner.id !== ins.id) {
-      const removed = await (repo.deleteAutoCreatedLoad?.(ins.id) ?? Promise.resolve(false));
-      if (!removed) {
-        record.reasons = ["load_ambiguous"];
-        record.history.push(event(repo, "automation", "auto_create_load_conflict", `${ins.id} vs ${winner.id}`));
-        await repo.saveRouting(doc.id, "needs_review", record, false);
-        return { state: "needs_review", routing: record };
-      }
-      loadId = winner.id;
-    }
-  }
   const at = iso(repo.now());
   const created: AppliedAction = {
     kind: "create_load", target_table: "loads", target_id: loadId, mode: "automatic", applied_at: at, before: null,
@@ -674,7 +670,7 @@ async function tryAutoCreateLoad(repo: DocumentRepo, doc: AutomationDocument, re
   };
   const att = await applyProposal(repo, doc, { kind: "attach_load", load_id: loadId }, "automatic");
   if (!att.ok) {
-    record.applied = [...record.applied, ...(createdHere && loadId === ins.id ? [created] : [])];
+    record.applied = [...record.applied, ...(createdHere ? [created] : [])];
     record.reasons = [att.reason];
     record.history.push(event(repo, "automation", "apply_failed", att.detail));
     await repo.saveRouting(doc.id, "needs_review", record, false);
@@ -683,7 +679,7 @@ async function tryAutoCreateLoad(repo: DocumentRepo, doc: AutomationDocument, re
   record.decision = "auto";
   record.reasons = [];
   record.proposed = { kind: "attach_load", load_id: loadId };
-  const madeIt = createdHere && loadId === ins.id;
+  const madeIt = createdHere;
   record.applied = [...record.applied, ...(madeIt ? [created] : []), att.action];
   record.history.push(event(repo, "automation", madeIt ? "applied:create_load" : "joined_existing_load", loadId));
   record.history.push(event(repo, "automation", `applied:${att.action.kind}`, loadId));

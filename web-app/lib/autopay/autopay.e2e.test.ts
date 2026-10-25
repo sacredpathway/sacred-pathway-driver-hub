@@ -19,6 +19,8 @@ import { loadBundle } from "../settlements/server";
 import { payrollResumeCandidates } from "../documents/resume";
 
 const ENABLED = !!process.env.SPU_E2E_PGHOST && !!process.env.SPU_E2E_PG_MODULE;
+/** Set by e2e.sh after rolling back migration #5 (sph_load_create_verified). */
+const NO_M5 = process.env.AP_E2E_NO_M5 === "1";
 const C = { id: "cccccccc-0000-0000-0000-000000000001", email: "owner-c@example.test" };
 const E = { id: "eeeeeeee-0000-0000-0000-000000000001", email: "owner-e@example.test" };
 const MARCUS = "cccccccc-0000-0000-0000-00000000d001"; // company driver 70 %
@@ -67,6 +69,8 @@ const MODEL = new Map<string, Record<string, unknown>>([
   ["rc-13013-other-carrier", RC("SPA-13013", 1300, { carrier_name: "Somebody Else Trucking", carrier_mc_number: "MC123987", driver_name: "Marcus Reed" })],
   ["rc-14014-semimonthly", RC("SPA-14014", 1000, { driver_name: "Sam Okafor", pickup_date: "2026-10-19", delivery_date: "2026-10-20" })],
   ["lumper-2002", RECEIPT("lumper_fee", "Capstone Lumper", 175, "SPA-2002", "2026-10-15")],
+  ["rc-16016-scan-a", RC("SPA-16016", 1600, { driver_name: "Marcus Reed", pickup_date: "2026-10-06", delivery_date: "2026-10-07", notes: "scan a" })],
+  ["rc-16016-scan-b", RC("SPA-16016", 1600, { driver_name: "Marcus Reed", pickup_date: "2026-10-06", delivery_date: "2026-10-07", notes: "scan b" })],
 ]);
 const FLAKY = new Set<string>(); // keys whose next extraction fails like a network error
 
@@ -168,18 +172,20 @@ async function statement(settlementId: string) {
 }
 const docRow = async (id: string) => (await q<Record<string, unknown>>("select * from public.documents where id = $1", [id]))[0];
 
-describe.skipIf(!ENABLED)("automatic upload -> paystub (real Postgres, RLS, real server actions)", () => {
-  beforeAll(async () => {
-    const req = createRequire(process.env.SPU_E2E_PG_MODULE!);
-    const { Pool } = req("pg") as { Pool: new (o: Record<string, unknown>) => PgPoolLike & { end(): Promise<void> } };
-    pool = new Pool({ host: process.env.SPU_E2E_PGHOST, port: Number(process.env.SPU_E2E_PGPORT), user: "postgres", database: "postgres", max: 30 });
-    H.__ap.pool = pool;
-    H.__ap.fn = fakeExtractor;
-    process.env.SMART_PAYROLL_CONFIRM = "local-only";
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:54321";
-    process.env.DOCUMENT_EXTRACTION_VERSION = "v3";
-    delete process.env.SMART_PAYROLL_AUTO;
-  });
+async function connect() {
+  const req = createRequire(process.env.SPU_E2E_PG_MODULE!);
+  const { Pool } = req("pg") as { Pool: new (o: Record<string, unknown>) => PgPoolLike & { end(): Promise<void> } };
+  pool = new Pool({ host: process.env.SPU_E2E_PGHOST, port: Number(process.env.SPU_E2E_PGPORT), user: "postgres", database: "postgres", max: 30 });
+  H.__ap.pool = pool;
+  H.__ap.fn = fakeExtractor;
+  process.env.SMART_PAYROLL_CONFIRM = "local-only";
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:54321";
+  process.env.DOCUMENT_EXTRACTION_VERSION = "v3";
+  delete process.env.SMART_PAYROLL_AUTO;
+}
+
+describe.skipIf(!ENABLED || NO_M5)("automatic upload -> paystub (real Postgres, RLS, real server actions)", () => {
+  beforeAll(connect);
   afterAll(async () => { await pool?.end(); });
 
   let L1001 = "";
@@ -468,5 +474,39 @@ describe.skipIf(!ENABLED)("automatic upload -> paystub (real Postgres, RLS, real
     expect((r.result as { payroll?: { state: string } }).payroll?.state).toBe("noted");
     expect((await statement(S2)).net).toBe(before);
     expect((await statement(S2)).b.additions).toHaveLength(0);
+  });
+});
+
+// Migration #5 rolled back: automatic load creation must create NOTHING (no
+// unguarded insert, no create-then-delete), and the manual path must still work.
+describe.skipIf(!ENABLED || !NO_M5)("without migration #5: automatic load creation is off, nothing is created", () => {
+  beforeAll(connect);
+  afterAll(async () => { await pool?.end(); });
+
+  it("16. two concurrent scans of a verified NEW rate con -> no load, both wait with the reason; one click then creates exactly one", async () => {
+    as(C);
+    expect(await q("select 1 from pg_proc where proname = 'sph_load_create_verified'")).toHaveLength(0);
+    const { uploadDocumentsAction, processDocumentAction, createLoadFromDocumentAction } = await docs();
+    const fd = new FormData();
+    for (const k of ["rc-16016-scan-a", "rc-16016-scan-b"]) fd.append("files", new File([`%PDF-1.4\n% SYNTHETIC KEY:${k}\n`], `${k}.pdf`, { type: "application/pdf" }));
+    const up = await uploadDocumentsAction(undefined, fd);
+    if (!up.ok) throw new Error(up.error);
+    const before = (await q<{ n: number }>("select count(*)::int n from public.loads"))[0].n;
+    const res = await Promise.all(up.documents.map((x) => processDocumentAction(x.id)));
+    for (const r of res) expect(r).toMatchObject({ ok: true, state: "needs_review" });
+    expect(await q("select id from public.loads where load_number = 'SPA-16016'")).toHaveLength(0);
+    expect((await q<{ n: number }>("select count(*)::int n from public.loads"))[0].n).toBe(before);
+    for (const x of up.documents) {
+      const d = await docRow(x.id);
+      expect(d.load_id).toBeNull();
+      expect((d.routing as { auto_create: { reasons: string[] } }).auto_create.reasons).toEqual(["safeguard_missing"]);
+    }
+    // The carrier's one click (manual path) is unaffected.
+    const f = new FormData();
+    for (const [k, v] of Object.entries({ load_number: "SPA-16016", broker_name: "Blue Ridge Logistics", origin: "Dallas, TX", destination: "Houston, TX",
+      pickup_date: "2026-10-06", delivery_date: "2026-10-07", total_miles: "240", line_haul_rate: "1600", fuel_surcharge: "0", accessorial_charges: "0", total_revenue: "1600", driver_id: MARCUS })) f.append(k, v);
+    const created = await createLoadFromDocumentAction(up.documents[0].id, undefined, f);
+    if (created && created.ok === false) throw new Error(`create load: ${created.message}`);
+    expect(await q("select id from public.loads where load_number = 'SPA-16016'")).toHaveLength(1);
   });
 });

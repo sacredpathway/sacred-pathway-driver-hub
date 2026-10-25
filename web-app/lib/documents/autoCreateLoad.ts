@@ -33,7 +33,9 @@ export type AutoCreateReason =
   | "not_v3" | "parse_failed" | "not_rate_confirmation" | "not_high_confidence" | "human_corrected" | "duplicate_upload"
   | "type_hint_mismatch" | "identity_unverified" | "carrier_not_ours" | "carrier_not_printed"
   | "no_driver_printed" | "driver_not_unique" | "driver_inactive" | "no_load_number" | "load_number_exists"
-  | "missing_fields" | "dates_invalid" | "no_revenue" | "validation";
+  | "missing_fields" | "dates_invalid" | "no_revenue" | "validation"
+  /** Recorded by the pipeline (not by decideAutoCreateLoad): migration #5 is not installed. */
+  | "safeguard_missing";
 
 export const AUTO_CREATE_REASON_TEXT: Readonly<Record<AutoCreateReason, string>> = {
   not_v3: "Not read with the payroll profile.",
@@ -55,6 +57,7 @@ export const AUTO_CREATE_REASON_TEXT: Readonly<Record<AutoCreateReason, string>>
   dates_invalid: "Pickup/delivery dates are out of order or out of range.",
   no_revenue: "Total carrier pay is missing or $0.00.",
   validation: "Amounts or quoted text didn't check out.",
+  safeguard_missing: "Automatic load creation is switched off until the database safeguard against duplicate loads is installed. Create the load below.",
 };
 
 export interface AutoCreateInput {

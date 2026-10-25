@@ -103,26 +103,21 @@ export function createDocumentRepo(supabase: SupabaseClient, ownerId: string): D
     },
 
     async createLoad(row) {
-      // Preferred: the database serialises "create if the number doesn't exist" (proposed migration #5).
+      // Only path: the database serialises "create unless this carrier already
+      // has the number" (migration #5). If the function is missing, nothing is
+      // written and the rate con waits for a person (no unguarded insert).
+      assertLoadColumns({ ...row, profile_id: ownerId }, "autoCreateLoad");
       const rpc = await supabase.rpc("sph_load_create_verified", { p: row });
       if (!rpc.error) {
         const r = (rpc.data ?? {}) as { id?: unknown; created?: unknown };
-        if (typeof r.id === "string") return { ok: true, id: r.id, created: r.created === true, guarded: true };
+        if (typeof r.id === "string") return { ok: true, id: r.id, created: r.created === true };
         return { ok: false, message: "Unexpected response creating the load." };
       }
       const code = (rpc.error as { code?: string }).code;
       const missing = code === "PGRST202" || code === "42883" || /could not find the function|does not exist/i.test(rpc.error.message ?? "");
-      if (!missing) return { ok: false, message: rpc.error.message };
-      // Fallback (migration #5 not installed): plain insert; the pipeline reconciles races.
-      const { data, error } = await supabase.from("loads")
-        .insert(assertLoadColumns({ ...row, profile_id: ownerId }, "autoCreateLoad")).select("id").single();
-      if (error || !data) return { ok: false, message: error?.message ?? "Could not create the load." };
-      return { ok: true, id: String((data as { id: string }).id), created: true, guarded: false };
-    },
-
-    async deleteAutoCreatedLoad(id) {
-      const { data, error } = await supabase.from("loads").delete().eq("id", id).eq("profile_id", ownerId).select("id");
-      return !error && Array.isArray(data) && data.length === 1;
+      return missing
+        ? { ok: false, unavailable: true, message: "sph_load_create_verified is not installed" }
+        : { ok: false, message: rpc.error.message };
     },
 
     async listWaitingDocuments(limit) {

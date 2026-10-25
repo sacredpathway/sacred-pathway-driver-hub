@@ -66,7 +66,7 @@ describe("decideAutoCreateLoad — only fully verified rate cons create loads", 
   });
 });
 
-function setup(mode: "guarded" | "fallback" = "guarded") {
+function setup(mode: "guarded" | "missing" = "guarded") {
   const st = newState(); st.v3 = true; st.autoCreate = true; st.identity = IDENTITY; st.createMode = mode;
   addDriver(st, { name: "Marcus Reed" });
   const repo = createFakeRepo(st);
@@ -122,14 +122,22 @@ describe("pipeline: rate con for an unknown load", () => {
     expect(d.load_id).toBe("00000000-race-4000-8000-000000000000");
     expect(d.routing!.applied.map((a) => a.kind)).toEqual(["attach_load"]); // we didn't create it
   });
-  it("race without migration #5: both inserted; the loser removes its own row and joins the winner", async () => {
-    const { st, repo } = setup("fallback");
-    st.raceInsert = "NEW-5001";
+  it("migration #5 not installed: nothing is created, no delete, rate con waits with the reason shown", async () => {
+    const { st, repo } = setup("missing");
     const doc = addDoc(st);
     st.modelOutput.set(doc.id, RC());
-    expect((await processDocument(repo, doc.id)).state).toBe("auto_routed");
-    expect(st.loads.filter((l) => l.load_number === "NEW-5001")).toHaveLength(1);
-    expect(st.docs.get(doc.id)!.load_id).toBe("00000000-race-4000-8000-000000000000");
+    expect((await processDocument(repo, doc.id)).state).toBe("needs_review");
+    expect(st.createdLoads ?? []).toHaveLength(0);
+    expect(st.loads).toHaveLength(0);
+    const d = st.docs.get(doc.id)!;
+    expect(d.load_id).toBeNull();
+    expect(d.routing!.proposed).toEqual({ kind: "create_load" });
+    expect((d.routing as unknown as { auto_create: { reasons: string[] } }).auto_create.reasons).toEqual(["safeguard_missing"]);
+    expect(d.routing!.history.some((h) => h.event === "auto_create_load_unavailable")).toBe(true);
+  });
+  it("the fake repo exposes no delete path (no create-then-delete safeguard)", () => {
+    const { repo } = setup();
+    expect((repo as unknown as Record<string, unknown>).deleteAutoCreatedLoad).toBeUndefined();
   });
 });
 

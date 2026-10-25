@@ -43,8 +43,8 @@ export interface FakeState {
   autoCreate?: boolean;
   /** carrier identity returned by carrierIdentity() */
   identity?: import("../payrollUpload/carrierIdentity").CarrierIdentity | null;
-  /** "guarded" = migration #5 present (database serialises creation) */
-  createMode?: "guarded" | "fallback";
+  /** "guarded" = migration #5 present (database serialises creation); "missing" = function not installed */
+  createMode?: "guarded" | "missing";
   /** loads inserted by createLoad (for assertions) */
   createdLoads?: string[];
   /** a competing upload inserts this load number right before our insert (race simulation) */
@@ -165,20 +165,13 @@ export function createFakeRepo(st: FakeState, ownerId = OWNER, now = new Date("2
         st.loads.push({ id: "00000000-race-4000-8000-000000000000", profile_id: ownerId, load_number: st.raceInsert, broker_name: null, pickup_date: null, delivery_date: null, origin: null, destination: null, total_revenue: 1, status: "pending" });
         st.raceInsert = null;
       }
-      if (st.createMode !== "fallback") {
-        const existing = st.loads.filter((l) => l.profile_id === ownerId && norm(l.load_number) === norm(row.load_number)).sort((a, b) => a.id.localeCompare(b.id))[0];
-        if (existing) return { ok: true, id: existing.id, created: false, guarded: true };
-      }
+      if (st.createMode === "missing") return { ok: false, unavailable: true, message: "sph_load_create_verified is not installed" };
+      const existing = st.loads.filter((l) => l.profile_id === ownerId && norm(l.load_number) === norm(row.load_number)).sort((a, b) => a.id.localeCompare(b.id))[0];
+      if (existing) return { ok: true, id: existing.id, created: false };
       const id = uid("n");
       st.loads.push({ id, profile_id: ownerId, load_number: row.load_number, broker_name: row.broker_name, pickup_date: row.pickup_date, delivery_date: row.delivery_date, origin: row.origin, destination: row.destination, total_revenue: row.total_revenue, status: "pending" });
       (st.createdLoads ??= []).push(id);
-      return { ok: true, id, created: true, guarded: st.createMode !== "fallback" };
-    },
-    async deleteAutoCreatedLoad(id) {
-      const i = st.loads.findIndex((l) => l.id === id && l.profile_id === ownerId);
-      if (i < 0) return false;
-      st.loads.splice(i, 1);
-      return true;
+      return { ok: true, id, created: true };
     },
     async listWaitingDocuments(limit) {
       return [...st.docs.values()]
