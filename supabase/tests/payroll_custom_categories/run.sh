@@ -15,6 +15,7 @@ trap cleanup EXIT
 [ "$(id -u)" = "0" ] && chown postgres "$WORK"
 as_pg "$PGBIN/initdb" -D "$WORK/data" -U postgres --auth=trust >/dev/null
 as_pg "$PGBIN/pg_ctl" -D "$WORK/data" -o "-p $PORT -k $WORK -c listen_addresses=''" -l "$WORK/pg.log" -w start >/dev/null
+echo "SERVER_VERSION $("$PGBIN/postgres" --version)"
 export PGHOST="$WORK" PGPORT="$PORT" PGUSER=postgres PGDATABASE=postgres
 PSQL=(psql -X -v ON_ERROR_STOP=1 -q)
 echo "== fixture"

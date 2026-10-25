@@ -1011,7 +1011,11 @@ async function finishV3(
       })
       .eq("id", docRow.id);
     if (updateErr) {
-      return await r.fail("UNKNOWN_SCAN_ERROR", "v3_db_update", updateErr.message);
+      return await r.fail(
+        "UNKNOWN_SCAN_ERROR",
+        "v3_db_update",
+        updateErr.message,
+      );
     }
   }
   log(traceId, "v3_done", {
