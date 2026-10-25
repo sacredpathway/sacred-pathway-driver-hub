@@ -7,4 +7,4 @@
 3. `next build` + `next start -p 3100` with `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321`,
    `SMART_PAYROLL_CONFIRM=local-only`, `DOCUMENT_EXTRACTION_VERSION=v3`.
 4. `AP_ACCOUNTS=accounts.json node journey.mjs` (two synthetic staging accounts; passwords are never committed).
-Result 2026-10-25: 18/18 checks.
+Results 2026-10-25: run 1 (APB, existing + click-created load) 18/18; run 2 (`AP_PREFIX=APC AP_SHIFT=7`, verified rate con creates the load automatically) 18/18.

@@ -11,6 +11,11 @@ import { sanitizePayrollExtraction } from "../../../../web-app/lib/documents/pay
 
 const UPSTREAM = "aatkirzwuuegurdlmcpl.supabase.co";
 const ANON = process.env.ANON!;
+const P = process.env.AP_PREFIX ?? "APB";
+const p = P.toLowerCase();
+const SH = Number(process.env.AP_SHIFT ?? "0");
+const iso = (d: string) => new Date(Date.parse(d + "T00:00:00Z") + SH * 86_400_000).toISOString().slice(0, 10);
+const us = (d: string) => { const [y, m, dd] = iso(d).split("-"); return `${m}/${dd}/${y}`; };
 const ev = (v: unknown, t: string) => ({ value: v, page: 1, source_text: t, confidence: "high" });
 const RC = (n: string, total: number, extra: Record<string, unknown>) => ({
   document_type: "rate_confirmation", confidence: "high", page_count: 1, notes: "",
@@ -29,16 +34,16 @@ const RCPT = (type: string, vendor: string, amount: number, n: string, date: str
   document_type: type, confidence: "high", page_count: 1, notes: "",
   fields: { vendor_name: ev(vendor, vendor), expense_amount: ev(amount, `TOTAL $${amount.toFixed(2)}`), receipt_date: ev(date, date), load_number: ev(n, `Load ${n}`) },
 });
-const d1 = { pickup_date: ev("2026-10-13", "10/13/2026"), delivery_date: ev("2026-10-14", "10/14/2026"), origin: ev("Dallas, TX", "Dallas, TX"), destination: ev("Houston, TX", "Houston, TX") };
-const d2 = { pickup_date: ev("2026-10-14", "10/14/2026"), delivery_date: ev("2026-10-15", "10/15/2026"), origin: ev("Tulsa, OK", "Tulsa, OK"), destination: ev("Denver, CO", "Denver, CO") };
+const d1 = { pickup_date: ev(iso("2026-10-13"), us("2026-10-13")), delivery_date: ev(iso("2026-10-14"), us("2026-10-14")), origin: ev("Dallas, TX", "Dallas, TX"), destination: ev("Houston, TX", "Houston, TX") };
+const d2 = { pickup_date: ev(iso("2026-10-14"), us("2026-10-14")), delivery_date: ev(iso("2026-10-15"), us("2026-10-15")), origin: ev("Tulsa, OK", "Tulsa, OK"), destination: ev("Denver, CO", "Denver, CO") };
 const MODEL: Record<string, unknown> = {
-  "rc-apb-1001": RC("APB-1001", 1850, { ...d1, total_miles: ev(240, "Miles: 240"), driver_name: ev("Marcus Reed", "Driver: Marcus Reed") }),
-  "pod-apb-1001": POD("APB-1001", d1),
-  "fuel-apb-1001": RCPT("fuel_receipt", "Pilot Travel Center #452", 412.18, "APB-1001", "2026-10-14"),
-  "pod-apb-2002": POD("APB-2002", d2),
-  "fuel-apb-2002": RCPT("fuel_receipt", "Loves Travel Stop #611", 398.4, "APB-2002", "2026-10-14"),
-  "toll-apb-2002": RCPT("toll", "Kansas Turnpike Authority", 18.25, "APB-2002", "2026-10-14"),
-  "rc-apb-2002": RC("APB-2002", 2400, { ...d2, total_miles: ev(680, "Miles: 680"), driver_name: ev("Tina Alvarez", "Driver: Tina Alvarez") }),
+  [`rc-${p}-1001`]: RC(`${P}-1001`, 1850, { ...d1, total_miles: ev(240, "Miles: 240"), driver_name: ev("Marcus Reed", "Driver: Marcus Reed") }),
+  [`pod-${p}-1001`]: POD(`${P}-1001`, d1),
+  [`fuel-${p}-1001`]: RCPT("fuel_receipt", "Pilot Travel Center #452", 412.18, `${P}-1001`, iso("2026-10-14")),
+  [`pod-${p}-2002`]: POD(`${P}-2002`, d2),
+  [`fuel-${p}-2002`]: RCPT("fuel_receipt", "Loves Travel Stop #611", 398.4, `${P}-2002`, iso("2026-10-14")),
+  [`toll-${p}-2002`]: RCPT("toll", "Kansas Turnpike Authority", 18.25, `${P}-2002`, iso("2026-10-14")),
+  [`rc-${p}-2002`]: RC(`${P}-2002`, 2400, { ...d2, total_miles: ev(680, "Miles: 680"), driver_name: ev("Tina Alvarez", "Driver: Tina Alvarez") }),
 };
 
 function upstream(method: string, path: string, headers: Record<string, string>, body?: Buffer): Promise<{ status: number; body: Buffer }> {

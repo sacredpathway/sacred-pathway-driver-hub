@@ -5,6 +5,7 @@ const { chromium } = createRequire(import.meta.url)("playwright");
 import fs from "node:fs";
 
 const BASE = "http://127.0.0.1:3100";
+const PFX = process.env.AP_PREFIX ?? "APB";
 const acc = JSON.parse(fs.readFileSync(process.env.AP_ACCOUNTS ?? "accounts.json", "utf8"));
 const SHOTS = process.env.AP_SHOTS ?? "shots";
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -47,7 +48,7 @@ try {
   check("sign in as synthetic carrier", true, page.url());
 
   // 1. Rate con for an existing load -> filed + payroll draft + paystub link
-  let rows = await upload(page, ["ratecon-APB-1001.pdf"]);
+  let rows = await upload(page, [`ratecon-${PFX}-1001.pdf`]);
   await page.screenshot({ path: `${SHOTS}/01-upload-ratecon.png`, fullPage: true });
   check("rate con read and filed automatically", rows[0].state === "done", rows[0].text);
   check("payroll draft created automatically", rows[0].payroll === "drafted", rows[0].text);
@@ -67,33 +68,33 @@ try {
   check("paystub driver from the stored load", driver1?.trim() === "Marcus Reed", driver1 ?? "");
 
   // 3. POD + fuel receipt for the same load in one upload -> filed, no second pay line
-  rows = await upload(page, ["pod-APB-1001.pdf", "fuel-APB-1001.pdf"]);
+  rows = await upload(page, [`pod-${PFX}-1001.pdf`, `fuel-${PFX}-1001.pdf`]);
   await page.screenshot({ path: `${SHOTS}/03-upload-pod-fuel.png`, fullPage: true });
   check("POD + fuel receipt filed", rows.every((r) => r.state === "done"), rows.map((r) => r.text).join(" | "));
   await page.goto(`${BASE}${paystub1}`);
   check("company-driver fuel is not a driver deduction; net unchanged", (await page.textContent('[data-testid="statement-net"]'))?.trim() === "$1,295.00");
 
   // 4. Exact duplicate upload -> marked duplicate, never read again, no payment
-  rows = await upload(page, ["ratecon-APB-1001.pdf"]);
+  rows = await upload(page, [`ratecon-${PFX}-1001.pdf`]);
   check("duplicate upload goes to review, not re-read", rows[0].state === "review" && /before/i.test(rows[0].text ?? ""), rows[0].text);
 
   // 5. Out of order (owner-operator): POD + fuel + toll before the rate con; rate con for a NEW load
-  rows = await upload(page, ["pod-APB-2002.pdf", "fuel-APB-2002.pdf", "toll-APB-2002.pdf"]);
+  rows = await upload(page, [`pod-${PFX}-2002.pdf`, `fuel-${PFX}-2002.pdf`, `toll-${PFX}-2002.pdf`]);
   check("paperwork for an unknown load waits in review", rows.every((r) => r.state === "review"), rows.map((r) => r.text).join(" | "));
-  rows = await upload(page, ["ratecon-APB-2002.pdf"]);
-  check("rate con for a new load waits for 'Create load' (never automatic)", rows[0].state === "review", rows[0].text);
-  await page.goto(`${BASE}/documents`);
-  const card = page.locator("li", { has: page.locator('[data-testid="create-load-driver"]') }).first();
-  const preselected = await card.locator('[data-testid="create-load-driver"] option:checked').textContent();
-  check("driver pre-selected from the printed name", preselected?.trim() === "Tina Alvarez", preselected ?? "");
-  await page.screenshot({ path: `${SHOTS}/04-create-load-card.png`, fullPage: true });
-  await Promise.all([page.waitForURL(/\/settlements\/.+\/statement/, { timeout: 60000 }), card.locator('button:has-text("Create load")').click()]);
+  rows = await upload(page, [`ratecon-${PFX}-2002.pdf`]);
+  await page.screenshot({ path: `${SHOTS}/04-auto-created-load.png`, fullPage: true });
+  check("verified rate con for a NEW load: load created automatically and drafted", rows[0].state === "done" && rows[0].payroll === "drafted", rows[0].text);
+  await page.goto(`${BASE}${rows[0].paystub}`);
   await page.waitForSelector('[data-testid="settlement-statement"]');
   const net2 = (await page.textContent('[data-testid="statement-net"]'))?.trim();
+  const driver2 = (await page.textContent('[data-testid="statement-driver"]'))?.trim();
   const deds = await page.$$eval('[data-testid="statement-deductions"] tbody tr', (trs) => trs.map((t) => t.textContent));
   await page.screenshot({ path: `${SHOTS}/05-paystub-owner-operator.png`, fullPage: true });
   // 88 % of 2400 = 2112.00; fuel 398.40 + toll 18.25 = 416.65 -> 1695.35
-  check("one click 'Create load' -> draft with the waiting receipts deducted", net2 === "$1,695.35", `${net2} | ${deds.join(" | ")}`);
+  check("no clicks: waiting receipts joined the draft as driver deductions", net2 === "$1,695.35" && driver2 === "Tina Alvarez", `${net2} | ${driver2} | ${deds.join(" | ")}`);
+  await page.goto(`${BASE}/loads`);
+  const loadRows = await page.locator(`text=${PFX}-2002`).count();
+  check("exactly one load created for the new rate con", loadRows >= 1, `${loadRows} mention(s) on /loads`);
 
   // 6. Payroll panel + settlement editor link
   await page.goto(`${BASE}/documents`);
