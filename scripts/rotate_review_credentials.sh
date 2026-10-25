@@ -79,28 +79,71 @@ esac
 STAGE="key"
 IFS= read -r -s -p "Production service-role key (Dashboard → Project Settings → API Keys): " KEY; echo
 [ -n "$KEY" ] || { status FAIL "no key entered"; echo "no key entered" >&2; exit 1; }
-# Classify the key without printing it: legacy JWT must carry role=service_role;
-# new keys must be sb_secret_….
-KIND="$(printf '%s' "$KEY" | python3 -c '
-import sys, json, base64
-k = sys.stdin.read()
-if k.startswith("sb_secret_"):
-    print("secret"); sys.exit()
-if k.startswith("sb_publishable_"):
-    print("publishable"); sys.exit()
-try:
-    p = k.split(".")[1]; p += "=" * (-len(p) % 4)
-    print(json.loads(base64.urlsafe_b64decode(p)).get("role", "unknown"))
-except Exception:
-    print("unknown")
-')"
-status KEY "kind=$KIND"
-case "$KIND" in
-  secret)       printf 'apikey: %s\nContent-Type: application/json\n' "$KEY" > "$TMP/headers" ;;
-  service_role) printf 'apikey: %s\nAuthorization: Bearer %s\nContent-Type: application/json\n' "$KEY" "$KEY" > "$TMP/headers" ;;
-  *) unset KEY; echo "that is not a service-role / secret key (detected: $KIND); nothing sent" >&2; exit 1 ;;
-esac
+# Clean and classify the key without printing it. Keys never contain whitespace,
+# quotes or control characters, so stripping those (e.g. a trailing newline, the
+# invisible bracketed-paste markers ESC[200~ / ESC[201~, or quotes copied with the
+# value) cannot change a valid key. Only the key's SHAPE is reported, never content.
+printf '%s' "$KEY" > "$TMP/rawkey"
 unset KEY
+python3 - "$TMP/rawkey" "$TMP/key" "$TMP/keyinfo" <<'PY'
+import sys, json, base64, re
+raw = open(sys.argv[1], "rb").read().decode("utf-8", "replace")
+had_ws = any(c.isspace() for c in raw)
+had_ctl = any(ord(c) < 32 or ord(c) == 127 for c in raw if not c.isspace())
+k = re.sub(r"(\x1b)?\[20[01]~", "", raw)                      # bracketed-paste markers
+k = "".join(c for c in k if not c.isspace() and ord(c) >= 32 and ord(c) != 127)
+k = k.strip("'\"`")
+fam = ("jwt" if k.startswith("eyJ") else "sb_secret" if k.startswith("sb_secret_")
+       else "sb_publishable" if k.startswith("sb_publishable_") else "sbp_token" if k.startswith("sbp_") else "other")
+kind, why = "unknown", ""
+if fam == "sb_secret":
+    kind = "secret"
+elif fam == "sb_publishable":
+    kind = "publishable"
+elif fam == "jwt":
+    parts = k.split(".")
+    if len(parts) != 3:
+        why = f"JWT with {len(parts)} segments (copy cut off?)"
+    else:
+        try:
+            p = parts[1] + "=" * (-len(parts[1]) % 4)
+            kind = json.loads(base64.urlsafe_b64decode(p)).get("role") or "unknown"
+            if kind == "unknown":
+                why = "JWT without a role"
+        except Exception:
+            why = "JWT payload unreadable (copy cut off?)"
+elif fam == "sbp_token":
+    why = "this is a Supabase personal access token, not the project's service-role key"
+else:
+    why = ("looks like the JWT signing secret or a password, not an API key" if "." not in k
+           else "unrecognised format")
+open(sys.argv[2], "w").write(k)
+shape = f"len={len(k)} segments={k.count('.') + 1} family={fam} cleaned_whitespace={had_ws} cleaned_control_chars={had_ctl}"
+open(sys.argv[3], "w").write(json.dumps({"kind": kind, "why": why, "shape": shape}))
+PY
+rm -f "$TMP/rawkey"
+KIND="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["kind"])' "$TMP/keyinfo")"
+KEY_WHY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["why"])' "$TMP/keyinfo")"
+KEY_SHAPE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["shape"])' "$TMP/keyinfo")"
+status KEY "kind=$KIND $KEY_SHAPE ${KEY_WHY:+why=$KEY_WHY}"
+case "$KIND" in
+  secret)       python3 - "$TMP/key" "$TMP/headers" <<'PY'
+import sys; k = open(sys.argv[1]).read()
+open(sys.argv[2], "w").write(f"apikey: {k}\nContent-Type: application/json\n")
+PY
+                ;;
+  service_role) python3 - "$TMP/key" "$TMP/headers" <<'PY'
+import sys; k = open(sys.argv[1]).read()
+open(sys.argv[2], "w").write(f"apikey: {k}\nAuthorization: Bearer {k}\nContent-Type: application/json\n")
+PY
+                ;;
+  *) rm -f "$TMP/key"
+     echo "That is not the production service-role key (detected: $KIND${KEY_WHY:+ - $KEY_WHY}). Nothing was sent." >&2
+     echo "Use: Supabase Dashboard -> project rmzqxsfhjqrshhdjzhze -> Project Settings -> API Keys ->" >&2
+     echo "     'Secret keys' (sb_secret_...) or 'Legacy API keys' -> service_role (Reveal, then Copy)." >&2
+     exit 1 ;;
+esac
+rm -f "$TMP/key"
 
 fields() {  # print only non-secret fields of a GoTrue user / error JSON
   python3 - "$1" <<'PY'
@@ -140,6 +183,7 @@ case "$ACTION" in
     IFS= read -r -s -p "Repeat new password: " PW2; echo
     [ "$PW" = "$PW2" ] || { unset PW PW2; status FAIL "passwords differ"; echo "passwords differ; nothing changed" >&2; exit 1; }
     [ "${#PW}" -ge 16 ] || { unset PW PW2; status FAIL "password shorter than 16"; echo "use 16+ characters; nothing changed" >&2; exit 1; }
+    case "$PW" in *[[:cntrl:]]*) unset PW PW2; status FAIL "password contains terminal control characters (paste markers?)"; echo "the password contains invisible control characters (terminal paste markers?); type or paste it again. Nothing changed." >&2; exit 1 ;; esac
     printf '%s' "$PW" | python3 -c 'import json,sys; sys.stdout.write(json.dumps({"password": sys.stdin.read()}))' > "$TMP/body.json"
     unset PW PW2 ;;
   disable) printf '{"ban_duration":"876000h"}' > "$TMP/body.json" ;;

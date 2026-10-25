@@ -89,7 +89,7 @@ def sample(stop, found, secrets, root):
         time.sleep(0.02)
 
 # ------------------------------------------------------------- runner
-def run(args, answers, env_extra=None, interrupt_at=None, shell_history=False, url=None):
+def run(args, answers, env_extra=None, interrupt_at=None, shell_history=False, url=None, extra_secrets=None):
     tmpdir = tempfile.mkdtemp(prefix="rot-test-")
     hist = os.path.join(tmpdir, "bash_history")
     log = os.path.join(tmpdir, "rotation-status.log")
@@ -99,7 +99,7 @@ def run(args, answers, env_extra=None, interrupt_at=None, shell_history=False, u
     env.update(env_extra or {})
     Mock.log.clear()
     stop, found = threading.Event(), set()
-    secrets = {"password": PASSWORD.strip(), "password(any encoding)": PW_MARK, "service_key": SERVICE_KEY, "secret_key": SECRET_KEY}
+    secrets = {"password": PASSWORD.strip(), "password(any encoding)": PW_MARK, "service_key": SERVICE_KEY, "secret_key": SECRET_KEY, **(extra_secrets or {})}
     root = [None]
     th = threading.Thread(target=sample, args=(stop, found, secrets, root), daemon=True); th.start()
     if shell_history:   # interactive bash, like a user typing the command in Terminal
@@ -176,7 +176,7 @@ check("sb_secret key: apikey only, no Authorization header", bool(p) and p[0]["h
 
 # 3. anon key refused before any request
 r = run(["rotate", UID, EMAIL], [ANON_KEY]); common("anon key", r)
-check("anon key: refused, zero requests", not r["requests"] and "not a service-role" in r["out"])
+check("anon key: refused, zero requests", not r["requests"] and "not the production service-role key (detected: anon" in r["out"])
 
 # 4. wrong expected email -> refused after read-only GET, no PUT
 r = run(["rotate", UID, "someone.else@example.com"], [SERVICE_KEY]); common("wrong email", r)
@@ -214,6 +214,30 @@ check("Ctrl-C: no PUT", not puts(r))
 dead = socket.socket(); dead.bind(("127.0.0.1", 0)); dead_port = dead.getsockname()[1]; dead.close()
 r = run(["rotate", UID, EMAIL], [SERVICE_KEY], url=f"http://127.0.0.1:{dead_port}"); common("unreachable", r)
 check("unreachable: no prompt, no request, clear message, logged", "Cannot reach Supabase" in r["out"] and "key" not in r["out"].split("Cannot reach")[0].lower() and not r["requests"] and "stage=connectivity" in r["log"], (r["out"][-200:], r["log"][-200:]))
+
+# 12. key pasted with damage the script must repair (never changes a valid key)
+ESC = "\x1b"
+r = run(["rotate", UID, EMAIL], [f"{ESC}[200~ {SERVICE_KEY} {ESC}[201~", EMAIL, PASSWORD, PASSWORD]); common("key with paste markers+spaces", r)
+p = puts(r)
+check("paste markers + spaces around legacy key: cleaned, exact key sent", bool(p) and p[0]["headers"].get("apikey") == SERVICE_KEY and "cleaned_control_chars=True" in r["log"], r["log"][-300:])
+r = run(["rotate", UID, EMAIL], [f'"{SECRET_KEY}"', EMAIL, PASSWORD, PASSWORD]); common("quoted sb_secret", r)
+check("quoted sb_secret key: quotes removed, exact key sent", bool(puts(r)) and puts(r)[0]["headers"].get("apikey") == SECRET_KEY)
+
+# 13. wrong credential types: refused before any request, with a precise non-secret reason
+SBP = "sbp_" + "a1" * 20
+JWT_SECRET = "Zq8" * 14
+CUT = SERVICE_KEY.split(".")[0] + "." + SERVICE_KEY.split(".")[1][:20]
+for label, key, expect in [("sbp_ access token", SBP, "personal access token"),
+                           ("JWT signing secret", JWT_SECRET, "JWT signing secret"),
+                           ("cut-off JWT", CUT, "cut off")]:
+    r = run(["rotate", UID, EMAIL], [key], extra_secrets={"wrong_key": key}); common(label, r)
+    check(f"{label}: refused, zero requests, reason shown and logged (shape only)",
+          not r["requests"] and expect in r["out"] and expect in r["log"] and "len=" in r["log"], (r["out"][-200:], r["log"][-300:]))
+
+# 14. password carrying paste markers is refused (would silently corrupt the password)
+bad = f"{ESC}[200~{PASSWORD}{ESC}[201~"
+r = run(["rotate", UID, EMAIL], [SERVICE_KEY, EMAIL, bad, bad]); common("password with paste markers", r)
+check("password with control characters: refused, no PUT", not puts(r) and "control characters" in r["out"])
 
 # 11. URL override cannot point anywhere but localhost
 out = subprocess.run(["bash", SCRIPT, "rotate", UID, EMAIL], env={"PATH": os.environ["PATH"], "ROTATE_TEST_URL": "https://evil.example.com"}, capture_output=True, text=True, stdin=subprocess.DEVNULL)
