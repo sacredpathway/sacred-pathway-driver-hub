@@ -181,7 +181,7 @@ Built by trucking people, for trucking people. Questions or feedback? support@sa
 
 **Demo Account** (required — signup is gated):
 - Username: `demarquishinton+appreview@gmail.com`
-- Password: `SacredReview!2026`
+- Password: `<stored in App Store Connect → App Review Information; never commit>`
 
 **Notes for Reviewer:**
 ```
