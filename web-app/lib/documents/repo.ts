@@ -7,6 +7,7 @@
 //  the web app; the OpenAI key lives only in the Edge Function.
 // =============================================================================
 
+import { webExtractionVersion } from "./versions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logActivity, type ActivityAction } from "@/lib/activity/log";
 import type { DocumentRepo, ExtractorResult, InsertResult } from "./pipeline";
@@ -105,7 +106,7 @@ export function createDocumentRepo(supabase: SupabaseClient, ownerId: string): D
 
     async invokeExtractor(id, typeHint) {
       const { data, error } = await supabase.functions.invoke("extract-document", {
-        body: { document_id: id, extraction_version: "v2", ...(typeHint ? { type_hint: typeHint } : {}) },
+        body: { document_id: id, extraction_version: webExtractionVersion(process.env), ...(typeHint ? { type_hint: typeHint } : {}) },
       });
       if (error) return extractorError(error);
       const body = data as { success?: boolean; code?: string; message?: string } | null;

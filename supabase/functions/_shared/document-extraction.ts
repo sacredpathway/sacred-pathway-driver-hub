@@ -138,6 +138,9 @@ Step 1 — classify. Set "document_type" to EXACTLY one of:
   "lumper_fee"         lumper / unloading fee receipt
   "toll"               toll receipt or toll statement line
   "repair"             repair, maintenance, tire or service invoice/receipt
+  "scale_ticket"       truck scale / weigh ticket (e.g. CAT scale)
+  "accessorial"        detention, layover or TONU proof (in/out times,
+                       broker approval of an accessorial)
   "cdl"                commercial driver's license
   "medical_card"       DOT medical examiner's certificate
   "mvr"                motor vehicle record / driving record report
@@ -157,9 +160,13 @@ bol / pod: load_number, bol_number, carrier_name, shipper_name, receiver_name,
   origin, destination, pickup_date, delivery_date, signature_present (true only
   if a receiver signature is visible), delivery_exceptions (short text, e.g.
   shortage/damage notes), reference_numbers
-fuel_receipt / lumper_fee / toll / repair: vendor_name, expense_amount (total
+fuel_receipt / lumper_fee / toll / repair / scale_ticket: vendor_name, expense_amount (total
   paid), receipt_date, receipt_number, unit_number (truck/unit #), load_number
   (only if printed), gallons, price_per_gallon, description (repair work)
+accessorial: load_number, bol_number, shipper_name, receiver_name, origin,
+  destination, pickup_date, delivery_date, accessorial_type ("detention",
+  "layover", "tonu" or "other"), accessorial_amount (only if an amount is
+  printed), detention_hours (only if printed), reference_numbers
 cdl / medical_card / mvr: person_name (as printed), license_number,
   license_state (2-letter), license_class, issue_date, expiration_date,
   exam_date (medical card), report_date (mvr)
@@ -265,6 +272,9 @@ export const FIELD_SPECS: Readonly<
   line_haul_rate: { kind: "money", max: 1_000_000 },
   fuel_surcharge: { kind: "money", max: 1_000_000 },
   accessorial_charges: { kind: "money", max: 1_000_000 },
+  accessorial_type: { kind: "string", max: 40 },
+  accessorial_amount: { kind: "money", max: 100_000 },
+  detention_hours: { kind: "count", max: 500 },
   total_revenue: { kind: "money", max: 1_000_000 },
   expense_amount: { kind: "money", max: 1_000_000 },
   price_per_gallon: { kind: "money", max: 100 },
@@ -332,6 +342,14 @@ export const FIELDS_BY_TYPE: Readonly<
   lumper_fee: RECEIPT,
   toll: RECEIPT,
   repair: RECEIPT,
+  scale_ticket: RECEIPT,
+  accessorial: [
+    ...LOAD_DOC,
+    "bol_number",
+    "accessorial_type",
+    "accessorial_amount",
+    "detention_hours",
+  ],
   cdl: PERSON,
   medical_card: [...PERSON, "exam_date"],
   mvr: [...PERSON, "report_date"],

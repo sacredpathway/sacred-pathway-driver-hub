@@ -21,6 +21,7 @@ import {
   RECEIPT_MAX_AGE_DAYS,
 } from "./confidence";
 import { sanitizeExtraction, type SanitizedExtraction } from "./extraction";
+import { sanitizePayrollExtraction, toV2Compatible } from "./payrollExtraction";
 import {
   addDays,
   findPossibleDuplicateExpense,
@@ -59,19 +60,23 @@ export function effectiveExtraction(
   stored: unknown,
   corrections?: Record<string, unknown> | null,
 ): { extraction: SanitizedExtraction; parseFailed: boolean; typeHint: CanonicalDocumentType | null } {
-  const s = (stored && typeof stored === "object" ? stored : {}) as StoredExtraction;
-  const fields = s.fields && typeof s.fields === "object" ? s.fields : {};
+  const s = (stored && typeof stored === "object" ? stored : {}) as StoredExtraction & { profile?: unknown };
+  // v3 (payroll profile): read the flat values through the same projection
+  // the payroll code uses, then the v2 sanitiser below as usual.
+  const isV3 = s.extraction_version === ("v3" as unknown) && s.profile === "payroll";
+  const v2view = isV3 ? toV2Compatible(sanitizePayrollExtraction(stored)) : null;
+  const fields = v2view ? v2view.fields : s.fields && typeof s.fields === "object" ? s.fields : {};
   const raw: Record<string, unknown> = {
     ...fields,
-    document_type: s.document_type,
-    confidence: s.model_confidence ?? undefined,
-    notes: s.notes,
+    document_type: v2view ? v2view.document_type : s.document_type,
+    confidence: (v2view ? v2view.model_confidence : s.model_confidence) ?? undefined,
+    notes: v2view ? v2view.notes : s.notes,
   };
   if (corrections) Object.assign(raw, corrections);
   const hint = s.type_hint ? routableDocumentType(s.type_hint) : null;
   return {
     extraction: sanitizeExtraction(raw),
-    parseFailed: s.parse_stage === "fallback" || s.extraction_version !== "v2",
+    parseFailed: s.parse_stage === "fallback" || !(s.extraction_version === "v2" || isV3),
     typeHint: hint && hint !== "other" ? hint : null,
   };
 }

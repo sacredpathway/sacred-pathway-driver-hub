@@ -86,11 +86,13 @@ export function payrollUseOf(x: SanitizedPayrollExtraction, own: OwnCompany): Po
     }
     case "bol":
     case "pod":
+    case "accessorial":
       return out("supporting_document", []);
     case "fuel_receipt":
     case "lumper_fee":
     case "toll":
     case "repair":
+    case "scale_ticket":
       return out("expense_candidate", []);
     default:
       return out("not_payroll", []);

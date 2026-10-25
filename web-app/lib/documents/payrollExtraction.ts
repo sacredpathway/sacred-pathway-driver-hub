@@ -611,7 +611,8 @@ evidence for every value.
 
 Step 1 — classify. Set "document_type" to EXACTLY one of:
   "rate_confirmation", "bol", "pod", "fuel_receipt", "lumper_fee", "toll",
-  "repair", "cdl", "medical_card", "mvr",
+  "repair", "scale_ticket" (truck scale / weigh ticket), "accessorial"
+  (detention, layover or TONU proof), "cdl", "medical_card", "mvr",
   "settlement_statement"  driver/owner-operator settlement, factoring
                           remittance or carrier pay statement listing loads,
                           additions and deductions
@@ -638,9 +639,13 @@ bol / pod: load_number, bol_number, carrier_name, shipper_name, receiver_name,
   origin, destination, pickup_date, delivery_date, signature_present,
   delivery_exceptions, driver_name, truck_number, trailer_number,
   reference_numbers
-fuel_receipt / lumper_fee / toll / repair: vendor_name, expense_amount,
+fuel_receipt / lumper_fee / toll / repair / scale_ticket: vendor_name, expense_amount,
   receipt_date, receipt_number, unit_number, load_number, gallons,
   price_per_gallon, description
+accessorial: load_number, bol_number, origin, destination, pickup_date,
+  delivery_date, accessorial_type ("detention" | "layover" | "tonu" | "other"),
+  accessorial_amount (only if printed), detention_hours (only if printed),
+  driver_name, reference_numbers
 cdl / medical_card / mvr: person_name, license_number, license_state,
   license_class, issue_date, expiration_date, exam_date, report_date
 settlement_statement: statement_number, payee_name, driver_name, truck_number,

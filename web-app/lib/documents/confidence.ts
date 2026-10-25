@@ -60,6 +60,7 @@ export const AUTO_EXPENSE_MAX: Readonly<Record<string, number>> = {
   lumper: 1000,
   toll: 500,
   maintenance: 5000,
+  scale: 150,
 };
 /** Receipts older than this (days) or dated in the future go to review. */
 export const RECEIPT_MAX_AGE_DAYS = 365;

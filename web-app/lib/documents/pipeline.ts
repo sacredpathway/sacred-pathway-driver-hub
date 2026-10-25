@@ -19,6 +19,7 @@
 
 import { decideRouting, effectiveExtraction, type Decision } from "./routing";
 import { normalizeIdentifier } from "./matching";
+import { isRoutableVersion } from "./versions";
 import { DOCUMENT_TYPE_GROUP, isCanonicalDocumentType, routableDocumentType } from "./taxonomy";
 import type {
   AppliedAction,
@@ -298,10 +299,10 @@ export async function processDocument(repo: DocumentRepo, documentId: string): P
 
   // Rows produced by the iPhone (v1) or entered manually are never re-read
   // here; the pending-document backfill is a separate, dry-run-first tool.
-  if ((doc.status === "processed" || doc.status === "manual") && doc.extraction_version !== "v2") {
+  if ((doc.status === "processed" || doc.status === "manual") && !isRoutableVersion(doc.extraction_version)) {
     return { state: "skipped", reason: "not_v2" };
   }
-  const needsExtraction = !(doc.status === "processed" && doc.extraction_version === "v2");
+  const needsExtraction = !(doc.status === "processed" && isRoutableVersion(doc.extraction_version));
   if (needsExtraction) {
     const stale = new Date(repo.now().getTime() - STALE_PROCESSING_MS).toISOString();
     if (!(await repo.claimExtraction(doc.id, stale))) return { state: "busy" };
@@ -313,7 +314,7 @@ export async function processDocument(repo: DocumentRepo, documentId: string): P
       return { state: "failed", message };
     }
     doc = await repo.getDocument(documentId);
-    if (!doc || doc.status !== "processed" || doc.extraction_version !== "v2") {
+    if (!doc || doc.status !== "processed" || !isRoutableVersion(doc.extraction_version)) {
       return { state: "failed", message: "extraction did not complete" };
     }
   }
@@ -322,7 +323,7 @@ export async function processDocument(repo: DocumentRepo, documentId: string): P
 
 export async function routeDocument(repo: DocumentRepo, doc: AutomationDocument): Promise<ProcessOutcome> {
   if (doc.review_status !== null) return { state: "skipped", reason: "already_routed" };
-  if (doc.extraction_version !== "v2") return { state: "skipped", reason: "not_v2" };
+  if (!isRoutableVersion(doc.extraction_version)) return { state: "skipped", reason: "not_v2" };
   const decision = await computeDecision(repo, doc);
   const record = newRecord(repo, decision, doc.routing, event(repo, "automation", "decided", decision.decision));
 
