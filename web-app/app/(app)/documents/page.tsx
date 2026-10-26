@@ -40,7 +40,7 @@ interface Filters {
   to?: string;
 }
 
-const gateOn = () => autoGate(process.env).enabled;
+const gateOn = (profileId: string | null) => autoGate(process.env, profileId).enabled;
 
 export default async function DocumentsPage({
   searchParams,
@@ -160,10 +160,10 @@ export default async function DocumentsPage({
 
   // Interrupted uploads: website files never read, or stuck "processing".
   const resumeIds = resumeCandidates(docsAll as never);
-  const payrollResumeIds = gateOn() ? payrollResumeCandidates(docsAll as never) : [];
+  const payrollResumeIds = gateOn(user?.id ?? null) ? payrollResumeCandidates(docsAll as never) : [];
 
   // What automatic payroll did with each document.
-  const gate = autoGate(process.env);
+  const gate = autoGate(process.env, user?.id ?? null);
   const payrollItems: PayrollActivityItem[] = docsAll
     .map((d) => ({ d, a: autopayOf(d.routing) }))
     .filter((x): x is { d: TruckDocument; a: NonNullable<ReturnType<typeof autopayOf>> } => !!x.a && x.a.state !== "skipped" && x.a.state !== "off")

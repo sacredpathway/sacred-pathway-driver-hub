@@ -50,7 +50,7 @@ export default async function PayrollReviewPage({ params }: { params: Promise<{ 
     const { data } = await supabase.storage.from("documents").createSignedUrl(doc.storage_path, 60 * 30);
     previewUrl = data?.signedUrl ?? null;
   }
-  const gate = payrollConfirmGate(process.env);
+  const gate = payrollConfirmGate(process.env, { profileId: user.id });
 
   return (
     <div className="space-y-6">

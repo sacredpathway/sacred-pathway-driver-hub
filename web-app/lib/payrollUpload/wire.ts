@@ -26,7 +26,7 @@ export function makeConfirmDeps(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): ConfirmDeps {
   return {
-    gate: payrollConfirmGate(env),
+    gate: payrollConfirmGate(env, { profileId: userId }),
     now: () => new Date(),
     getProfile: (id) => getCarrierProfile(supabase, id),
     getDocument: (id) => getProposalDocument(supabase, userId, id),

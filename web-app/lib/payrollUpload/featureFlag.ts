@@ -23,6 +23,8 @@
 
 export type GateReason =
   | "flag_off"
+  | "pilot_not_included"
+  | "pilot_expired"
   | "not_local_database"
   | "not_staging_database"
   | "production_database"
@@ -52,7 +54,45 @@ function parse(url: string): URL | null {
   }
 }
 
-export function payrollConfirmGate(env: Readonly<Record<string, string | undefined>>): ConfirmGate {
+/**
+ * Production pilot scope (owner decision 2026-10-26). In production the gate is
+ * additionally limited to the carrier accounts listed in
+ * SMART_PAYROLL_PILOT_PROFILES (comma-separated profile ids) and to the time
+ * before SMART_PAYROLL_PILOT_UNTIL (ISO 8601 with a timezone). Fails closed:
+ * no list, no/invalid end date, no signed-in carrier, or past the end date
+ * = OFF. Local / staging modes are unaffected.
+ */
+export interface GateScope {
+  profileId?: string | null;
+  now?: Date;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function pilotProfiles(env: Readonly<Record<string, string | undefined>>): string[] {
+  return (env.SMART_PAYROLL_PILOT_PROFILES ?? "").split(",").map((s) => s.trim().toLowerCase()).filter((s) => UUID.test(s));
+}
+
+/** End of the production pilot, or null when missing / not an explicit-timezone ISO timestamp. */
+export function pilotUntil(env: Readonly<Record<string, string | undefined>>): Date | null {
+  const raw = (env.SMART_PAYROLL_PILOT_UNTIL ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(raw)) return null;
+  const t = new Date(raw);
+  return Number.isNaN(t.getTime()) ? null : t;
+}
+
+export function payrollConfirmGate(env: Readonly<Record<string, string | undefined>>, scope: GateScope = {}): ConfirmGate {
+  const g = payrollConfirmGateUnscoped(env);
+  if (!g.enabled || g.reason !== "enabled_production") return g;
+  const id = (scope.profileId ?? "").trim().toLowerCase();
+  if (!id || !pilotProfiles(env).includes(id)) return { enabled: false, reason: "pilot_not_included" };
+  const until = pilotUntil(env);
+  const now = scope.now ?? new Date();
+  if (!until || now.getTime() >= until.getTime()) return { enabled: false, reason: "pilot_expired" };
+  return g;
+}
+
+function payrollConfirmGateUnscoped(env: Readonly<Record<string, string | undefined>>): ConfirmGate {
   const mode = env.SMART_PAYROLL_CONFIRM;
   if (mode !== "local-only" && mode !== "staging-only" && mode !== "production") return { enabled: false, reason: "flag_off" };
   const raw = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -84,6 +124,8 @@ export function payrollConfirmGate(env: Readonly<Record<string, string | undefin
 
 export const GATE_MESSAGE: Record<GateReason, string> = {
   flag_off: "Confirming payroll drafts from documents is turned off in this environment. You can review everything; nothing will be saved.",
+  pilot_not_included: "Smart Payroll drafting isn't turned on for your account yet. You can review everything; nothing will be saved.",
+  pilot_expired: "The Smart Payroll drafting pilot has ended. You can review everything; nothing will be saved.",
   not_local_database: "Confirming payroll drafts from documents only runs against a local test database. Nothing will be saved here.",
   not_staging_database: "Confirming payroll drafts from documents only runs against the staging test project. Nothing will be saved here.",
   production_database: "Confirming payroll drafts from documents is not enabled for the live system yet. You can review everything; nothing will be saved.",
@@ -100,7 +142,7 @@ export const GATE_MESSAGE: Record<GateReason, string> = {
  * be on in production without the two-variable production switch) and can be
  * switched off on its own with SMART_LOAD_AUTO_CREATE=off.
  */
-export function autoLoadCreationEnabled(env: Readonly<Record<string, string | undefined>>): boolean {
-  if (!payrollConfirmGate(env).enabled) return false;
+export function autoLoadCreationEnabled(env: Readonly<Record<string, string | undefined>>, scope: GateScope = {}): boolean {
+  if (!payrollConfirmGate(env, scope).enabled) return false;
   return (env.SMART_LOAD_AUTO_CREATE ?? "").trim().toLowerCase() !== "off";
 }

@@ -103,7 +103,17 @@ describe("gate", () => {
     const prod = "https://rmzqxsfhjqrshhdjzhze.supabase.co";
     expect(autoGate({ SMART_PAYROLL_CONFIRM: "production", NEXT_PUBLIC_SUPABASE_URL: prod }).enabled).toBe(false);
     expect(autoGate({ SMART_PAYROLL_CONFIRM: "production", SMART_PAYROLL_PRODUCTION_ACK: "nope", NEXT_PUBLIC_SUPABASE_URL: prod }).enabled).toBe(false);
-    expect(autoGate({ SMART_PAYROLL_CONFIRM: "production", SMART_PAYROLL_PRODUCTION_ACK: "rmzqxsfhjqrshhdjzhze", NEXT_PUBLIC_SUPABASE_URL: prod }).enabled).toBe(true);
+    // production also needs the pilot scope: listed carrier + an end date in the future (fails closed)
+    const on = { SMART_PAYROLL_CONFIRM: "production", SMART_PAYROLL_PRODUCTION_ACK: "rmzqxsfhjqrshhdjzhze", NEXT_PUBLIC_SUPABASE_URL: prod };
+    const PILOT = "23585e59-b6a2-41ce-9e44-c8b848ba16ff";
+    const scoped = { ...on, SMART_PAYROLL_PILOT_PROFILES: PILOT, SMART_PAYROLL_PILOT_UNTIL: "2999-01-01T00:00:00Z" };
+    expect(autoGate(on, PILOT).enabled).toBe(false); // no pilot list / end date
+    expect(autoGate(scoped).enabled).toBe(false); // no signed-in carrier
+    expect(autoGate(scoped, PILOT).enabled).toBe(true);
+    expect(autoGate(scoped, "bbbbbbbb-0000-4000-8000-00000000000b").enabled).toBe(false); // other carrier
+    expect(autoGate({ ...scoped, SMART_PAYROLL_PILOT_UNTIL: "2020-01-01T00:00:00Z" }, PILOT).enabled).toBe(false); // expired
+    expect(autoGate({ ...scoped, SMART_PAYROLL_PILOT_UNTIL: "next week" }, PILOT).enabled).toBe(false); // invalid date
+    expect(autoGate({ ...scoped, SMART_PAYROLL_PILOT_UNTIL: "2999-01-01T00:00:00" }, PILOT).enabled).toBe(false); // no timezone
     expect(autoGate({ SMART_PAYROLL_CONFIRM: "production", SMART_PAYROLL_PRODUCTION_ACK: "rmzqxsfhjqrshhdjzhze", NEXT_PUBLIC_SUPABASE_URL: "https://aatkirzwuuegurdlmcpl.supabase.co" }).enabled).toBe(false);
     expect(autoGate({ SMART_PAYROLL_CONFIRM: "staging-only", SMART_PAYROLL_PRODUCTION_ACK: "rmzqxsfhjqrshhdjzhze", NEXT_PUBLIC_SUPABASE_URL: prod }).enabled).toBe(false);
   });

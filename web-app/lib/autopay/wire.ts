@@ -25,8 +25,8 @@ const EXPENSE_COLUMNS = "id, load_id, category, amount, receipt_date, vendor_nam
 const OPEN = new Set(["draft", "ready_for_review"]);
 
 /** Automation runs only where confirmation is enabled, unless explicitly switched off. */
-export function autoGate(env: Readonly<Record<string, string | undefined>>): { enabled: boolean; reason: string } {
-  const g = payrollConfirmGate(env);
+export function autoGate(env: Readonly<Record<string, string | undefined>>, profileId: string | null = null): { enabled: boolean; reason: string } {
+  const g = payrollConfirmGate(env, { profileId });
   if (!g.enabled) return { enabled: false, reason: GATE_MESSAGE[g.reason] };
   if ((env.SMART_PAYROLL_AUTO ?? "").trim().toLowerCase() === "off") {
     return { enabled: false, reason: "Automatic payroll drafts are switched off. Documents still file automatically; drafts are made from the payroll review." };
@@ -45,7 +45,7 @@ export interface AutoWireOptions {
 export function makeAutoDeps(supabase: SupabaseClient, o: AutoWireOptions): AutoDeps {
   const ownerId = o.user.id;
   const env = o.env ?? process.env;
-  const gate = autoGate(env);
+  const gate = autoGate(env, ownerId);
   const ctx: CoreCtx = { supabase: supabase as never, user: { id: ownerId, email: o.user.email }, actor: { userId: ownerId, name: o.user.email } };
 
   const settlementsById = async (ids: string[]) => {

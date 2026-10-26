@@ -95,7 +95,7 @@ export function createDocumentRepo(supabase: SupabaseClient, ownerId: string): D
       return (data as unknown as AutomationDocument) ?? null;
     },
 
-    autoCreateLoads: autoLoadCreationEnabled(process.env),
+    autoCreateLoads: autoLoadCreationEnabled(process.env, { profileId: ownerId }),
 
     async carrierIdentity() {
       const { data } = await supabase.from("profiles").select("id, company_name, mc_number, dot_number, account_type, account_role").eq("id", ownerId).maybeSingle();
