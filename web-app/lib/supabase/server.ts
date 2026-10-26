@@ -13,6 +13,8 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+type CookieToSet = { name: string; value: string; options: CookieOptions };
+
 // Next.js 15: `cookies()` returns a Promise. Callers must `await` this
 // function. Every server component that pulls auth from Supabase calls
 // `const supabase = await createClient()` at the top.
@@ -24,29 +26,24 @@ export async function createClient() {
   if (!url || !anonKey) {
     throw new Error(
       "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required. " +
-      "Set them in Cloudflare Pages → Settings → Environment Variables."
+      "They are inlined at build time — set them in the build environment (web-app/.env.local or CI)."
     );
   }
 
   return createServerClient(url, anonKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
+      setAll(cookiesToSet: CookieToSet[]) {
         try {
-          cookieStore.set({ name, value, ...options });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
         } catch {
           // Cookies cannot be set during a server render of a Server
           // Component. The middleware refresh handles writes; this catch
           // silences the harmless throw.
-        }
-      },
-      remove(name: string, options: CookieOptions) {
-        try {
-          cookieStore.set({ name, value: "", ...options });
-        } catch {
-          // Same rationale as `set` above.
         }
       },
     },

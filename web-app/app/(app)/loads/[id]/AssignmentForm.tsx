@@ -53,7 +53,7 @@ export default function AssignmentForm({
         <h2 className="text-base font-semibold text-sp-textPrimary">Fleet assignment</h2>
         <p className="mt-1 text-xs text-sp-textSecondary">
           Optional. Assign a truck and trailer so this load shows up under each
-          fleet unit's history. ON DELETE SET NULL — if you delete the truck or
+          fleet unit&apos;s history. ON DELETE SET NULL — if you delete the truck or
           trailer later, the load stays put.
         </p>
       </header>

@@ -13,8 +13,6 @@ import RangePicker from "../RangePicker";
 import ReportToolbar from "../ReportToolbar";
 import { fetchDriverEarningsReport } from "./data";
 
-export const runtime = "edge";
-
 export default async function DriverEarningsReportPage({
   searchParams,
 }: {

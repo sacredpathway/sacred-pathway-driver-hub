@@ -23,8 +23,6 @@ import {
 } from "../actions";
 import type { Driver } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function DriverDetailPage({
   params,
   searchParams,
@@ -164,9 +162,9 @@ export default async function DriverDetailPage({
       <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
         <h2 className="text-base font-semibold text-sp-textPrimary">Danger zone</h2>
         <p className="mt-1 text-xs text-sp-textSecondary">
-          Drivers can't be hard-deleted — their paystub history must remain
+          Drivers can&apos;t be hard-deleted — their paystub history must remain
           intact. Deactivate to remove from active payroll instead. Existing
-          paystubs are immutable snapshots and won't change.
+          paystubs are immutable snapshots and won&apos;t change.
         </p>
         <div className="mt-3 flex items-center gap-2">
           {driver.active ? (

@@ -16,8 +16,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AcceptInviteForm from "./AcceptInviteForm";
 
-export const runtime = "edge";
-
 interface InvitePreview {
   ok: boolean;
   error?: string;

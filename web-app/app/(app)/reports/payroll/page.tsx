@@ -14,8 +14,6 @@ import RangePicker from "../RangePicker";
 import ReportToolbar from "../ReportToolbar";
 import { fetchPayrollReport } from "./data";
 
-export const runtime = "edge";
-
 export default async function PayrollReportPage({
   searchParams,
 }: {

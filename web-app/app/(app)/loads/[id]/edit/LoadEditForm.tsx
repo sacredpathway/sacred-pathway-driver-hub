@@ -1,6 +1,6 @@
 // =============================================================================
 //  LoadEditForm — full load edit (broker / route / dates / financials /
-//                  status / fleet assignment) · Phase E3
+//                  fleet assignment) · Phase E3
 // -----------------------------------------------------------------------------
 //  All fields here map 1:1 to updateLoadAction's payload. Inline error display
 //  via useActionState. Truck/Trailer pickers show active units first; the
@@ -22,16 +22,9 @@ type ServerAction = (
 type TruckOption = Pick<Truck, "id" | "unit_number" | "status" | "make" | "model">;
 type TrailerOption = Pick<Trailer, "id" | "unit_number" | "status" | "trailer_type" | "make" | "model">;
 
-const LOAD_STATUS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "",                     label: "— Not set —" },
-  { value: "unassigned",           label: "Unassigned" },
-  { value: "assigned",             label: "Assigned" },
-  { value: "in_transit",           label: "In transit" },
-  { value: "delivered",            label: "Delivered" },
-  { value: "ready_for_settlement", label: "Ready for settlement" },
-  { value: "settled",              label: "Settled" },
-  { value: "cancelled",            label: "Cancelled" },
-];
+// No status control (owner decision 2026-09-30): a load's paperwork is edited
+// here; its stored status (pending / ready_for_settlement / settled /
+// cancelled / …) is never sent and is preserved by updateLoadAction.
 
 export default function LoadEditForm({
   load,
@@ -57,17 +50,11 @@ export default function LoadEditForm({
         </div>
       )}
 
-      {/* Broker / load # / status */}
+      {/* Broker / load # */}
       <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
-        <h2 className="text-base font-semibold text-sp-textPrimary">Broker & status</h2>
+        <h2 className="text-base font-semibold text-sp-textPrimary">Broker</h2>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Load #" name="load_number" defaultValue={load.load_number ?? ""} />
-          <SelectField
-            label="Status"
-            name="status"
-            defaultValue={load.status ?? ""}
-            options={LOAD_STATUS_OPTIONS}
-          />
           <Field label="Broker name" name="broker_name" defaultValue={load.broker_name ?? ""} />
           <Field label="Broker MC #" name="broker_mc_number" defaultValue={load.broker_mc_number ?? ""} />
         </div>
@@ -104,7 +91,7 @@ export default function LoadEditForm({
       <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
         <h2 className="text-base font-semibold text-sp-textPrimary">Financials</h2>
         <p className="mt-1 text-xs text-sp-textSecondary">
-          Total revenue is what's settled in payroll. Line haul + FSC + accessorials
+          Total revenue is what&apos;s settled in payroll. Line haul + FSC + accessorials
           are informational breakouts.
         </p>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -142,7 +129,7 @@ export default function LoadEditForm({
         <header className="mb-3">
           <h2 className="text-base font-semibold text-sp-textPrimary">Fleet assignment</h2>
           <p className="mt-1 text-xs text-sp-textSecondary">
-            Optional. Picking "— Unassigned —" explicitly clears the FK (sets to
+            Optional. Picking &quot;— Unassigned —&quot; explicitly clears the FK (sets to
             NULL). ON DELETE SET NULL applies if the truck/trailer is later removed.
           </p>
         </header>
@@ -215,37 +202,6 @@ function Field({
         className="mt-1 w-full rounded-md border border-white/10 bg-sp-background px-3 py-2 text-sm text-sp-textPrimary placeholder:text-sp-textSecondary/60 focus:border-sp-gold focus:outline-none"
       />
       {help && <span className="mt-1 block text-[10px] text-sp-textSecondary">{help}</span>}
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  name,
-  defaultValue,
-  options,
-}: {
-  label: string;
-  name: string;
-  defaultValue: string;
-  options: ReadonlyArray<{ value: string; label: string }>;
-}) {
-  return (
-    <label className="block">
-      <span className="block text-xs font-medium uppercase tracking-wide text-sp-textSecondary">
-        {label}
-      </span>
-      <select
-        name={name}
-        defaultValue={defaultValue}
-        className="mt-1 w-full rounded-md border border-white/10 bg-sp-background px-3 py-2 text-sm text-sp-textPrimary focus:border-sp-gold focus:outline-none"
-      >
-        {options.map((o) => (
-          <option key={o.value || "none"} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
     </label>
   );
 }

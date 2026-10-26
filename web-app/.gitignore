@@ -13,3 +13,8 @@ tsconfig.tsbuildinfo
 *.bak
 *.orig
 *.rej
+
+# Cloudflare Workers / OpenNext
+.open-next/
+.dev.vars
+.dev.vars.*

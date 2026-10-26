@@ -11,8 +11,6 @@ import ExpenseForm from "../ExpenseForm";
 import { createExpenseAction } from "../actions";
 import type { Load } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function NewExpensePage() {
   const supabase = await createClient();
   const { data: loadsRaw } = await supabase
@@ -28,7 +26,7 @@ export default async function NewExpensePage() {
 
   return (
     <section className="space-y-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">New expense</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">

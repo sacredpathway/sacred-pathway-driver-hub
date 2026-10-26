@@ -12,8 +12,6 @@ import ExpenseForm from "../../ExpenseForm";
 import { updateExpenseAction } from "../../actions";
 import type { Expense, Load } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function EditExpensePage({
   params,
 }: {

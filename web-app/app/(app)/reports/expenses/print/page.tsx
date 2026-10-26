@@ -9,8 +9,6 @@ import { fetchExpenseReport } from "../data";
 import PrintShell from "../../PrintShell";
 import { formatCurrency, formatNumber } from "@/lib/format";
 
-export const runtime = "edge";
-
 export default async function ExpensePrintPage({
   searchParams,
 }: {

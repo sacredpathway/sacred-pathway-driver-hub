@@ -20,8 +20,6 @@ import DriverForm from "../../DriverForm";
 import { updateDriverAction } from "../../actions";
 import type { Driver } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function EditDriverPage({
   params,
 }: {
@@ -55,7 +53,7 @@ export default async function EditDriverPage({
           <h1 className="text-2xl font-bold tracking-tight">Edit {driver.name}</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
             Changes save to {driver.worker_type === "W2" ? "W2 Employee" : "1099 Contractor"} {driver.name}.
-            Historical paystubs are immutable and won't be rewritten.
+            Historical paystubs are immutable and won&apos;t be rewritten.
           </p>
         </div>
         <Link

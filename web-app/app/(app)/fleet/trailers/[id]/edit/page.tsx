@@ -13,8 +13,6 @@ import DeleteFleetButton from "../../../DeleteFleetButton";
 import { updateTrailerAction, deleteTrailerAction } from "../../../actions";
 import type { Trailer } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function EditTrailerPage({
   params,
 }: {
@@ -47,7 +45,7 @@ export default async function EditTrailerPage({
             Edit trailer #{trailer.unit_number}
           </h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
-            Changes save to this trailer. Historical load assignments aren't affected.
+            Changes save to this trailer. Historical load assignments aren&apos;t affected.
           </p>
         </div>
         <Link href="/fleet" className="text-xs text-sp-textSecondary hover:text-sp-textPrimary">
@@ -66,7 +64,7 @@ export default async function EditTrailerPage({
       <section className="rounded-xl border border-white/5 bg-sp-card/40 p-5">
         <h2 className="text-base font-semibold text-sp-textPrimary">Danger zone</h2>
         <p className="mt-1 text-xs text-sp-textSecondary">
-          Archive by setting Status to "Sold" or "Inactive" above — historical
+          Archive by setting Status to &quot;Sold&quot; or &quot;Inactive&quot; above — historical
           load attribution is preserved. Hard delete is refused automatically
           if any load references this trailer.
         </p>

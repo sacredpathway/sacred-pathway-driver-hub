@@ -10,7 +10,7 @@ export default function DriversError({
   return (
     <section className="space-y-3 rounded-xl border border-sp-danger/40 bg-sp-danger/10 p-5">
       <h2 className="text-base font-semibold text-sp-danger">
-        Couldn't save that change
+        Couldn&apos;t save that change
       </h2>
       <p className="text-sm text-sp-textPrimary">{error.message}</p>
       <button

@@ -10,15 +10,17 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { safeNext } from "@/lib/auth/safeNext";
 
-export const runtime = "edge";
+type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export async function GET(request: NextRequest) {
   const url        = new URL(request.url);
   const code       = url.searchParams.get("code");
   const tokenHash  = url.searchParams.get("token_hash");
   const otpType    = url.searchParams.get("type"); // email | magiclink | recovery | invite | signup
-  const next       = url.searchParams.get("next") ?? "/dashboard";
+  // Only same-origin app paths; anything else (//host, https://…) → /dashboard.
+  const next       = safeNext(url.searchParams.get("next"));
   const errorParam = url.searchParams.get("error_description") ?? url.searchParams.get("error");
 
   // Supabase puts auth errors in the URL if its own verify step failed
@@ -43,21 +45,22 @@ export async function GET(request: NextRequest) {
 
   // Build the success response FIRST so the Supabase client's cookie
   // callbacks can write the session cookies onto it.
-  let response = NextResponse.redirect(new URL(next, request.url));
+  const response = NextResponse.redirect(new URL(next, request.url));
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
+        getAll() {
+          return request.cookies.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          response.cookies.set({ name, value: "", ...options });
+        // All cookies of one auth write (chunked session + removals) arrive
+        // together and land on the same response.
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
         },
       },
     }

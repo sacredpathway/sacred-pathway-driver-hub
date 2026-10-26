@@ -3,8 +3,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatDate } from "@/lib/format";
 import type { BrokerContact, Broker } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function BrokerContactsPage() {
   const supabase = await createClient();
   // Two queries instead of a join — keeps RLS auditing trivial and lets
@@ -31,7 +29,7 @@ export default async function BrokerContactsPage() {
 
   return (
     <section className="space-y-4">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Broker Contacts</h1>
         <span className="text-xs text-sp-textSecondary">{list.length} total</span>
       </header>

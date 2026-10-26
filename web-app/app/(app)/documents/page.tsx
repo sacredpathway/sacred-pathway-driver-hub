@@ -20,8 +20,17 @@ import type { TruckDocument, Load } from "@/lib/supabase/types";
 import UploadCard from "./UploadCard";
 import DeleteDocButton from "./DeleteDocButton";
 import { DOCUMENT_TYPES } from "./constants";
-
-export const runtime = "edge";
+import { ReviewQueue, RecentlyFiled, type FiledItem, type Option, type ReviewItem } from "./ReviewQueue";
+import { documentTypeLabel, storedValuesForType } from "@/lib/documents/taxonomy";
+import { FIELDS_BY_TYPE } from "@/lib/documents/extraction";
+import { effectiveExtraction } from "@/lib/documents/routing";
+import type { RoutingRecord } from "@/lib/documents/types";
+import { PayrollActivity, type PayrollActivityItem } from "./PayrollActivity";
+import { ResumeProcessing } from "./ResumeProcessing";
+import { autopayOf, autoGate } from "@/lib/autopay/wire";
+import { matchDriver } from "@/lib/documents/matching";
+import { sanitizePayrollExtraction } from "@/lib/documents/payrollExtraction";
+import { payrollResumeCandidates, resumeCandidates } from "@/lib/documents/resume";
 
 interface Filters {
   type?: string;
@@ -30,6 +39,8 @@ interface Filters {
   from?: string;
   to?: string;
 }
+
+const gateOn = () => autoGate(process.env).enabled;
 
 export default async function DocumentsPage({
   searchParams,
@@ -53,6 +64,7 @@ export default async function DocumentsPage({
   };
 
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   // -----------------------------------------------------------------------
   // Pull every doc + every load + every broker. For a single carrier the
@@ -60,13 +72,14 @@ export default async function DocumentsPage({
   // the SQL simple and let us filter across joined columns without an RPC.
   // If the dataset grows past ~10k rows we'll move to a SQL view.
   // -----------------------------------------------------------------------
-  const [{ data: docsRaw, error: docErr }, { data: loadsRaw }] = await Promise.all([
+  const [{ data: docsRaw, error: docErr }, { data: loadsRaw }, { data: driversRaw }] = await Promise.all([
     (async () => {
       let q = supabase
         .from("documents")
         .select("*")
         .order("created_at", { ascending: false });
-      if (filters.type) q = q.eq("document_type", filters.type);
+      // Include historical spellings (e.g. "lumper" for lumper_fee) — no rename.
+      if (filters.type) q = q.in("document_type", storedValuesForType(filters.type));
       if (filters.from) q = q.gte("created_at", `${filters.from}T00:00:00.000Z`);
       if (filters.to)   q = q.lte("created_at", `${filters.to}T23:59:59.999Z`);
       return q;
@@ -74,6 +87,12 @@ export default async function DocumentsPage({
     supabase
       .from("loads")
       .select("id, load_number, broker_name, pickup_date"),
+    supabase
+      .from("drivers")
+      .select("id, profile_id, name, active, cdl_number, cdl_state")
+      .order("active", { ascending: false })
+      .order("name", { ascending: true })
+      .limit(500),
   ]);
 
   if (docErr) {
@@ -125,12 +144,116 @@ export default async function DocumentsPage({
   );
   const linkMap = new Map(links.map((l) => [l.id, l.url]));
 
+  // ---------------------------------------------------------------------
+  // Review queue + recently filed (computed from the same rows).
+  // Only website uploads (source = 'web') are offered "Extract now"; the
+  // older iPhone rows still pending since April are NOT touched here (they
+  // need the separate dry-run backfill).
+  // ---------------------------------------------------------------------
+  const loadLabel = (l: Pick<Load, "id" | "load_number" | "broker_name" | "pickup_date">) =>
+    [l.load_number ? `#${l.load_number}` : l.id.slice(0, 8), l.broker_name, l.pickup_date].filter(Boolean).join(" · ");
+  const loadOptions: Option[] = loads.map((l) => ({ id: l.id, label: loadLabel(l) }));
+  const driverOptions: Option[] = ((driversRaw ?? []) as Array<{ id: string; name: string; active: boolean | null }>)
+    .map((d) => ({ id: d.id, label: d.active === false ? `${d.name} (inactive)` : d.name }));
+
+  const driverRows = ((driversRaw ?? []) as Array<{ id: string; profile_id: string; name: string; active: boolean | null; cdl_number: string | null; cdl_state: string | null }>);
+
+  // Interrupted uploads: website files never read, or stuck "processing".
+  const resumeIds = resumeCandidates(docsAll as never);
+  const payrollResumeIds = gateOn() ? payrollResumeCandidates(docsAll as never) : [];
+
+  // What automatic payroll did with each document.
+  const gate = autoGate(process.env);
+  const payrollItems: PayrollActivityItem[] = docsAll
+    .map((d) => ({ d, a: autopayOf(d.routing) }))
+    .filter((x): x is { d: TruckDocument; a: NonNullable<ReturnType<typeof autopayOf>> } => !!x.a && x.a.state !== "skipped" && x.a.state !== "off")
+    .sort((x, y) => String(y.a.at ?? "").localeCompare(String(x.a.at ?? "")))
+    .slice(0, 15)
+    .map(({ d, a }) => {
+      const routing = d.routing as RoutingRecord | null;
+      const l = d.load_id ? loadById.get(d.load_id) : undefined;
+      return {
+        id: d.id, typeLabel: documentTypeLabel(routing?.type ?? d.document_type), loadLabel: l ? loadLabel(l) : null,
+        state: a.state, holds: a.holds, settlementId: a.settlement_id ?? (d as { settlement_id?: string | null }).settlement_id ?? null, at: a.at ?? null,
+      };
+    });
+
+  const reviewDocs = docsAll.filter(
+    (d) => d.review_status === "needs_review" || (d.source === "web" && d.review_status == null),
+  );
+  const reviewUrls = new Map(
+    await Promise.all(
+      reviewDocs.map(async (d) => {
+        if (linkMap.has(d.id)) return [d.id, linkMap.get(d.id) ?? null] as const;
+        const { data: signed } = await supabase.storage.from("documents").createSignedUrl(d.storage_path, 60 * 30);
+        return [d.id, signed?.signedUrl ?? null] as const;
+      }),
+    ),
+  );
+  const reviewItems: ReviewItem[] = reviewDocs.map((d) => {
+    const routing = (d.routing ?? null) as RoutingRecord | null;
+    const ai = effectiveExtraction(d.extracted_data, null).extraction;
+    const type = routing?.type ?? ai.document_type;
+    const linked = d.load_id ? loadById.get(d.load_id) : undefined;
+    // Driver printed on a rate con (payroll extraction) — pre-selected in
+    // "Create load" only on an exact, unique name match; the owner confirms.
+    let suggestedDriverId: string | null = null;
+    if (type === "rate_confirmation" && user) {
+      const name = sanitizePayrollExtraction(d.extracted_data).values.driver_name;
+      if (typeof name === "string" && name) {
+        const m = matchDriver(user.id, driverRows, { person_name: name });
+        suggestedDriverId = m.target_id;
+      }
+    }
+    return {
+      id: d.id,
+      suggestedDriverId,
+      url: reviewUrls.get(d.id) ?? null,
+      createdAt: d.created_at,
+      status: d.status ?? "pending",
+      errorMessage: d.error_message ?? null,
+      duplicateOf: d.duplicate_of ?? null,
+      type,
+      typeLabel: documentTypeLabel(type),
+      routing,
+      aiFields: ai.fields,
+      corrections: routing?.corrections ?? {},
+      editableFields: [...FIELDS_BY_TYPE[type]],
+      linkedLoadLabel: linked ? loadLabel(linked) : null,
+    };
+  });
+
+  const filedItems: FiledItem[] = docsAll
+    .filter((d) => d.review_status === "auto_routed" || d.review_status === "approved")
+    .map((d) => {
+      const routing = d.routing as RoutingRecord | null;
+      const actions = (routing?.applied ?? [])
+        .map((action, index) => ({ action, index }))
+        .filter((x) => !x.action.undone_at)
+        .map(({ action, index }) => ({
+          index,
+          action,
+          label:
+            action.kind === "attach_load"
+              ? `attached to load ${String(action.after.load_number ?? "")}`
+              : action.kind === "create_expense"
+              ? `expense $${Number(action.after.amount ?? 0).toFixed(2)} ${String(action.after.vendor_name ?? "")}`
+              : action.kind === "attach_driver_document"
+              ? `filed to driver ${String(action.after.title ?? "")}`
+              : `load ${String(action.after.load_number ?? "")} created`,
+        }));
+      return { id: d.id, typeLabel: documentTypeLabel(routing?.type ?? d.document_type), routedAt: d.reviewed_at ?? d.updated_at ?? null, actions };
+    })
+    .filter((i) => i.actions.length > 0)
+    .sort((a, b) => String(b.actions[0]?.action.applied_at).localeCompare(String(a.actions[0]?.action.applied_at)))
+    .slice(0, 10);
+
   const anyFilter =
     !!(filters.type || filters.broker || filters.loadNumber || filters.from || filters.to);
 
   return (
     <section className="space-y-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
@@ -149,8 +272,15 @@ export default async function DocumentsPage({
         </div>
       )}
 
-      {/* Upload card */}
-      <UploadCard loads={loads} />
+      {/* Upload card — #upload is the target of the dashboard / top-bar "Upload" action */}
+      <div id="upload" className="scroll-mt-20">
+        <UploadCard loads={loads} />
+      </div>
+
+      <ResumeProcessing ids={resumeIds} payrollIds={payrollResumeIds} />
+      <PayrollActivity items={payrollItems} enabledMessage={gate.enabled ? null : payrollItems.length ? gate.reason : null} />
+      <ReviewQueue items={reviewItems} loads={loadOptions} drivers={driverOptions} />
+      <RecentlyFiled items={filedItems} />
 
       {/* Filter bar */}
       <FilterBar
@@ -191,7 +321,7 @@ export default async function DocumentsPage({
                 return (
                   <tr key={d.id} className="hover:bg-white/5">
                     <td className="px-3 py-3 font-medium text-sp-textPrimary">
-                      {labelize(d.document_type)}
+                      {documentTypeLabel(d.document_type)}
                     </td>
                     <td className="px-3 py-3 text-sp-textSecondary">
                       {linkedLoad?.broker_name ?? "—"}
@@ -287,7 +417,7 @@ function FilterBar({
             <option value="">All types</option>
             {DOCUMENT_TYPES.map((t) => (
               <option key={t} value={t}>
-                {labelize(t)}
+                {documentTypeLabel(t)}
               </option>
             ))}
           </select>
@@ -357,9 +487,4 @@ function FilterBar({
       </div>
     </form>
   );
-}
-
-function labelize(s: string | null | undefined): string {
-  if (!s) return "Document";
-  return s.split("_").map((p) => p[0]?.toUpperCase() + p.slice(1)).join(" ");
 }

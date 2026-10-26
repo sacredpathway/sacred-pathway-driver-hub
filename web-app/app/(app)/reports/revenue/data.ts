@@ -1,7 +1,8 @@
 // =============================================================================
 //  Revenue report — per-broker rollup
 // -----------------------------------------------------------------------------
-//  Reads `loads` filtered by pickup_date and groups by broker_name (case-
+//  Reads `loads` attributed by delivery → pickup → created date
+//  (lib/loads/periodDate.ts) and groups by broker_name (case-
 //  insensitive normalization). Uses load.broker_name directly rather than
 //  brokers.* so loads without a linked broker row still appear under the
 //  string broker name the carrier typed in.
@@ -10,6 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Load } from "@/lib/supabase/types";
 import type { ResolvedRange } from "@/lib/reports/range";
+import { filterLoadsByRange, loadPeriodOrFilter, LOAD_PERIOD_COLUMNS } from "@/lib/loads/periodDate";
 
 export interface RevenueRow {
   broker_name: string;        // canonical display name
@@ -37,13 +39,15 @@ export async function fetchRevenueReport(
 ): Promise<RevenueReport> {
   const { data: loadsRaw } = await supabase
     .from("loads")
-    .select("id, broker_name, total_miles, total_revenue, pickup_date")
-    .gte("pickup_date", range.from)
-    .lte("pickup_date", range.to);
+    .select(`id, broker_name, total_miles, total_revenue, ${LOAD_PERIOD_COLUMNS}`)
+    .or(loadPeriodOrFilter(range));
 
-  const loads = (loadsRaw ?? []) as Array<
-    Pick<Load, "id" | "broker_name" | "total_miles" | "total_revenue" | "pickup_date">
-  >;
+  const loads = filterLoadsByRange(
+    (loadsRaw ?? []) as Array<
+      Pick<Load, "id" | "broker_name" | "total_miles" | "total_revenue" | "pickup_date" | "delivery_date" | "created_at">
+    >,
+    range,
+  );
 
   const map = new Map<string, RevenueRow>();
   for (const l of loads) {

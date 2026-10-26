@@ -1,0 +1,25 @@
+{
+  "audit" : [
+    {
+      "action" : "approved",
+      "actor_name" : "Test Operator",
+      "actor_user_id" : "22222222-0000-4000-8000-000000009001",
+      "field_name" : "status",
+      "id" : "E48C64F0-8C72-42E4-B46E-4BDCE63A1F7B",
+      "new_value" : "approved",
+      "previous_value" : "draft",
+      "profile_id" : "11111111-0000-4000-8000-000000000001",
+      "settlement_id" : "C18F8DEF-4C09-41E7-8F57-308B67D3CE43",
+      "summary" : "Draft → Approved · net $462.06",
+      "timestamp" : "2026-09-15T12:00:00.000Z"
+    }
+  ],
+  "expected_updated_at" : "2026-09-15T12:00:00.000Z",
+  "from" : "draft",
+  "payment_method" : null,
+  "payment_reference" : null,
+  "reason" : null,
+  "settlement_id" : "c18f8def-4c09-41e7-8f57-308b67d3ce43",
+  "settlement_number" : "IOS-2026-0017",
+  "to" : "approved"
+}

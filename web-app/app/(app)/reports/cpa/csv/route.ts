@@ -15,8 +15,6 @@ import { resolveRange } from "@/lib/reports/range";
 import { csvResponse } from "@/lib/reports/csv";
 import { fetchCpaReport } from "../data";
 
-export const runtime = "edge";
-
 // Hand-rolled escape (instead of pulling buildCsv) so each section can use
 // its own column shape without invoking the generic builder N times.
 function esc(v: unknown): string {

@@ -8,10 +8,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/supabase/types";
+import { signLogoUrl } from "@/lib/branding/profile";
 import CompanyProfileForm from "./CompanyProfileForm";
 import LogoCard from "./LogoCard";
-
-export const runtime = "edge";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -33,18 +32,11 @@ export default async function SettingsPage() {
 
   const profile: Profile | null = (profileRaw ?? null) as Profile | null;
 
-  let logoUrl: string | null = null;
-  if (profile?.logo_storage_path) {
-    const { data: signed } = await supabase
-      .storage
-      .from("branding")
-      .createSignedUrl(profile.logo_storage_path, 60 * 60);
-    logoUrl = signed?.signedUrl ?? null;
-  }
+  const logoUrl = await signLogoUrl(supabase, profile?.logo_storage_path);
 
   return (
     <section className="space-y-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="mt-1 text-xs text-sp-textSecondary">
@@ -60,6 +52,12 @@ export default async function SettingsPage() {
             className="rounded-md px-3 py-1.5 text-sp-textSecondary hover:bg-white/5 hover:text-sp-textPrimary"
           >
             Paystub
+          </Link>
+          <Link
+            href="/settings/payroll-categories"
+            className="rounded-md px-3 py-1.5 text-sp-textSecondary hover:bg-white/5 hover:text-sp-textPrimary"
+          >
+            Payroll categories
           </Link>
         </nav>
       </header>

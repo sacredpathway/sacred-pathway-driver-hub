@@ -3,6 +3,9 @@
 // -----------------------------------------------------------------------------
 //  Client component. Server action (createLoadAction) is bound via the
 //  useActionState hook for inline error rendering.
+//
+//  No status control (owner rule, 2026-09-30): an entered load is a delivered
+//  load; the server saves NEW_LOAD_STATUS (lib/loads/status.ts).
 // =============================================================================
 
 "use client";
@@ -10,7 +13,6 @@
 import { useActionState } from "react";
 import type { Driver, Truck, Trailer } from "@/lib/supabase/types";
 import { createLoadAction, type LoadActionState } from "../actions";
-import { LOAD_STATUS_OPTIONS } from "../constants";
 
 export default function NewLoadForm({
   drivers,
@@ -38,17 +40,6 @@ export default function NewLoadForm({
       <Section title="Load">
         <Grid2>
           <Field label="Load #"           name="load_number"      placeholder="e.g. 451223" />
-          <Field label="Status"           name="status">
-            <select
-              name="status"
-              defaultValue="unassigned"
-              className="w-full rounded-lg bg-sp-cardLight px-3 py-2 text-sm text-sp-textPrimary outline-none ring-1 ring-white/5 focus:ring-sp-gold"
-            >
-              {LOAD_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{labelize(s)}</option>
-              ))}
-            </select>
-          </Field>
         </Grid2>
       </Section>
 

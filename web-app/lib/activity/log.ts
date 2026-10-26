@@ -38,7 +38,15 @@ export type ActivityAction =
   | "reactivated"
   | "branding_updated"
   | "logo_uploaded"
-  | "logo_removed";
+  | "logo_removed"
+  // document automation (W-docs)
+  | "auto_routed"
+  | "needs_review"
+  | "approved"
+  | "dismissed"
+  | "undone"
+  // settlements
+  | "reopened";
 
 export interface LogActivityInput {
   entityType: ActivityEntityType;
@@ -138,6 +146,11 @@ function humanVerb(action: string): string {
     case "branding_updated":   return "branding updated";
     case "logo_uploaded":      return "logo uploaded";
     case "logo_removed":       return "logo removed";
+    case "auto_routed":        return "auto-routed";
+    case "needs_review":       return "sent to review";
+    case "approved":           return "approved";
+    case "dismissed":          return "dismissed";
+    case "undone":             return "action undone";
     default:                   return action;
   }
 }

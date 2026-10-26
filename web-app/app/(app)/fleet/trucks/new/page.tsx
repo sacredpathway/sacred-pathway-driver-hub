@@ -6,8 +6,6 @@ import Link from "next/link";
 import FleetForm from "../../FleetForm";
 import { createTruckAction } from "../../actions";
 
-export const runtime = "edge";
-
 export default function NewTruckPage() {
   return (
     <section className="space-y-4">

@@ -3,8 +3,6 @@ import EmptyState from "@/components/EmptyState";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type { Broker } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function BrokersPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -32,7 +30,7 @@ export default async function BrokersPage() {
 
   return (
     <section className="space-y-4">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Brokers</h1>
         <span className="text-xs text-sp-textSecondary">{brokers.length} total</span>
       </header>

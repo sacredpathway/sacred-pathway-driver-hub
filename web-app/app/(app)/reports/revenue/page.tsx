@@ -10,8 +10,6 @@ import RangePicker from "../RangePicker";
 import ReportToolbar from "../ReportToolbar";
 import { fetchRevenueReport } from "./data";
 
-export const runtime = "edge";
-
 export default async function RevenueReportPage({
   searchParams,
 }: {

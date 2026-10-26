@@ -28,6 +28,23 @@
 // Shipped in supabase-js ≥ 2.49.4.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 import { jsonResponse, withCors } from "../_shared/cors.ts";
+import {
+  buildV2UserContent,
+  checkV2File,
+  estimatePdfPageCount,
+  EXTRACTION_VERSION,
+  looksLikePdf,
+  type OpenAIContentPart,
+  sanitizeExtraction,
+  SYSTEM_PROMPT_V2,
+  V2_MAX_PDF_PAGES,
+} from "../_shared/document-extraction.ts";
+import { routableDocumentType } from "../_shared/document-taxonomy.ts";
+import {
+  PAYROLL_EXTRACTION_VERSION,
+  sanitizePayrollExtraction,
+  SYSTEM_PROMPT_V3,
+} from "../_shared/payroll-extraction.ts";
 
 // ---------- Config ----------
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
@@ -198,7 +215,12 @@ Deno.serve(withCors(async (req) => {
     log(traceId, "auth_ok", { userId });
 
     // ---- 2. Parse input ----
-    let body: { document_id?: string };
+    let body: {
+      document_id?: string;
+      extraction_version?: string;
+      type_hint?: string;
+      persist?: boolean;
+    };
     try {
       body = await req.json();
     } catch (err) {
@@ -242,6 +264,25 @@ Deno.serve(withCors(async (req) => {
       storage_path: docRow.storage_path,
       status: docRow.status,
     });
+
+    // ---- v2 (web app, opt-in). The iPhone never sends extraction_version,
+    // so everything below this branch is the unchanged v1 contract.
+    // ---- v3 = payroll profile (Smart Payroll Upload, opt-in). Same pipeline
+    // as v2 with a different prompt + sanitiser; v1 and v2 are unchanged.
+    if (
+      body.extraction_version === EXTRACTION_VERSION ||
+      body.extraction_version === PAYROLL_EXTRACTION_VERSION
+    ) {
+      return await runV2(traceId, t0, docRow, {
+        profile: body.extraction_version === PAYROLL_EXTRACTION_VERSION
+          ? "v3"
+          : "v2",
+        typeHint: typeof body.type_hint === "string" ? body.type_hint : null,
+        // persist:false = dry-run preview (pending-document backfill plan):
+        // extract and return, write NOTHING to the database.
+        persist: body.persist !== false,
+      });
+    }
 
     // ---- 4. Download file using service role ----
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE, {
@@ -662,4 +703,335 @@ function stripJsonFences(s: string): string {
     out = out.replace(/^```(json)?/i, "").replace(/```$/, "");
   }
   return out.trim();
+}
+
+// ============================================================================
+// v2 — canonical taxonomy, PDF input, sanitised output (web app only)
+// ----------------------------------------------------------------------------
+// Extraction ONLY. This function never creates loads, expenses or links; the
+// web app routes the sanitised result under the signed-in user's RLS.
+// ============================================================================
+
+const RAW_TEXT_MAX = 20_000;
+
+interface V2Options {
+  typeHint: string | null;
+  persist: boolean;
+  /** "v3" = payroll profile. Defaults to v2 behaviour. */
+  profile?: "v2" | "v3";
+}
+
+interface V2DocRow {
+  id: string;
+  profile_id: string;
+  storage_path: string;
+  retry_count: number | null;
+  status: string | null;
+}
+
+async function runV2(
+  traceId: string,
+  t0: number,
+  docRow: V2DocRow,
+  opts: V2Options,
+): Promise<Response> {
+  const documentId = docRow.id;
+  const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE, {
+    auth: { persistSession: false },
+  });
+  const fail = async (code: ErrorCode, stage: string, detail: string) => {
+    if (opts.persist) {
+      await markFailed(adminClient, documentId, `${stage}: ${detail}`);
+    }
+    return errorResponse(traceId, code, stage, clip(detail));
+  };
+
+  if (opts.persist) {
+    await adminClient.from("documents").update({
+      status: "processing",
+      error_message: null,
+    })
+      .eq("id", documentId);
+  }
+
+  const { data: fileBlob, error: dlErr } = await adminClient.storage
+    .from("documents")
+    .download(docRow.storage_path);
+  if (dlErr || !fileBlob) {
+    return await fail(
+      "UNKNOWN_SCAN_ERROR",
+      "v2_storage_download",
+      dlErr?.message ?? "nil blob",
+    );
+  }
+
+  const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+  const check = checkV2File(
+    fileBlob.type ?? "",
+    docRow.storage_path,
+    bytes.length,
+  );
+  if (!check.ok) {
+    return await fail("UNKNOWN_SCAN_ERROR", "v2_validate", check.reason);
+  }
+  if (check.kind === "pdf") {
+    if (!looksLikePdf(bytes)) {
+      return await fail("UNKNOWN_SCAN_ERROR", "v2_validate", "not_a_pdf");
+    }
+    const pages = estimatePdfPageCount(bytes);
+    if (pages !== null && pages > V2_MAX_PDF_PAGES) {
+      return await fail(
+        "UNKNOWN_SCAN_ERROR",
+        "v2_validate",
+        `pdf_too_many_pages:${pages}`,
+      );
+    }
+  }
+  log(traceId, "v2_file_ok", { kind: check.kind, size: bytes.length });
+
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!openaiKey) {
+    return await fail(
+      "SCAN_TEMPORARILY_UNAVAILABLE",
+      "v2_missing_key",
+      "OPENAI_API_KEY not set",
+    );
+  }
+
+  const hint = opts.typeHint ? routableDocumentType(opts.typeHint) : null;
+  const content = buildV2UserContent(
+    check.kind,
+    check.mime,
+    encodeBase64(bytes),
+    hint,
+  );
+
+  let raw: string;
+  let modelUsed: string;
+  try {
+    const result = opts.profile === "v3"
+      ? await callOpenAIV2(openaiKey, content, SYSTEM_PROMPT_V3, 4096)
+      : await callOpenAIV2(openaiKey, content);
+    raw = stripJsonFences(result.content);
+    modelUsed = result.model;
+  } catch (err) {
+    const anyErr = err as any;
+    const technical = clip(
+      `${anyErr?.status ?? ""} ${anyErr?.message ?? String(err)}`,
+    );
+    return await fail(classifyProviderError(err), "v2_openai", technical);
+  }
+
+  let parsed: unknown = null;
+  let parseStage: "strict" | "salvage" | "fallback" = "strict";
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_) {
+    const first = raw.indexOf("{");
+    const last = raw.lastIndexOf("}");
+    if (first >= 0 && last > first) {
+      try {
+        parsed = JSON.parse(raw.slice(first, last + 1));
+        parseStage = "salvage";
+      } catch (_) { /* fall through */ }
+    }
+    if (parsed === null) parseStage = "fallback";
+  }
+
+  // Untrusted model output -> whitelisted, validated fields only.
+  if (opts.profile === "v3") {
+    return await finishV3(traceId, t0, adminClient, docRow, opts, {
+      parsed: parseStage === "fallback" ? {} : parsed,
+      parseStage,
+      hint,
+      raw,
+      modelUsed,
+      mime: check.mime,
+      size: bytes.length,
+      fail,
+    });
+  }
+  const sanitized = sanitizeExtraction(parseStage === "fallback" ? {} : parsed);
+  const extracted = {
+    ...sanitized,
+    parse_stage: parseStage,
+    // Upload-time type chosen by the user, kept so routing can flag a
+    // disagreement even when the document is re-routed later.
+    type_hint: hint,
+    // A failed parse is never high confidence, whatever the model claimed.
+    model_confidence: parseStage === "fallback"
+      ? null
+      : sanitized.model_confidence,
+  };
+
+  if (opts.persist) {
+    const { error: updateErr } = await adminClient
+      .from("documents")
+      .update({
+        status: "processed",
+        processed: true,
+        extracted_data: extracted,
+        raw_text: raw.slice(0, RAW_TEXT_MAX),
+        confidence: extracted.model_confidence ?? "low",
+        document_type: extracted.document_type,
+        provider: "openai",
+        model: modelUsed,
+        file_mime_type: check.mime,
+        file_size: bytes.length,
+        extraction_version: EXTRACTION_VERSION,
+        retry_count: (docRow.retry_count ?? 0) +
+          (docRow.status === "failed" ? 1 : 0),
+        error_message: null,
+      })
+      .eq("id", documentId);
+    if (updateErr) {
+      return await fail(
+        "UNKNOWN_SCAN_ERROR",
+        "v2_db_update",
+        updateErr.message,
+      );
+    }
+  }
+
+  log(traceId, "v2_done", {
+    parseStage,
+    type: extracted.document_type,
+    persist: opts.persist,
+    elapsed: Date.now() - t0,
+  });
+  return jsonResponse({
+    success: true,
+    document_id: documentId,
+    status: "processed",
+    extraction_version: EXTRACTION_VERSION,
+    persisted: opts.persist,
+    extracted,
+    model: modelUsed,
+  });
+}
+
+async function callOpenAIV2(
+  apiKey: string,
+  content: OpenAIContentPart[],
+  systemPrompt: string = SYSTEM_PROMPT_V2,
+  maxTokens = 2048,
+): Promise<{ content: string; model: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  try {
+    const res = await fetch(OPENAI_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0,
+        response_format: { type: "json_object" },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      const err = new Error(`http_${res.status}: ${text.slice(0, 400)}`);
+      (err as any).status = res.status;
+      (err as any).rawBody = text;
+      throw err;
+    }
+    const json = await res.json();
+    const out = json.choices?.[0]?.message?.content;
+    if (!out || typeof out !== "string" || out.trim().length === 0) {
+      const err = new Error("empty response from provider");
+      (err as any).status = res.status;
+      throw err;
+    }
+    return { content: out, model: json.model ?? DEFAULT_MODEL };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ============================================================================
+// v3 — payroll profile (Smart Payroll Upload). Extraction ONLY: like v2 it
+// never creates loads, settlements, lines or links. Writes only the
+// document row's extraction columns (when persist is true).
+// ============================================================================
+
+async function finishV3(
+  traceId: string,
+  t0: number,
+  adminClient: any,
+  docRow: V2DocRow,
+  opts: V2Options,
+  r: {
+    parsed: unknown;
+    parseStage: "strict" | "salvage" | "fallback";
+    hint: string | null;
+    raw: string;
+    modelUsed: string;
+    mime: string;
+    size: number;
+    fail: (code: ErrorCode, stage: string, detail: string) => Promise<Response>;
+  },
+): Promise<Response> {
+  const sanitized = sanitizePayrollExtraction(r.parsed);
+  const extracted = {
+    ...sanitized,
+    parse_stage: r.parseStage,
+    type_hint: r.hint,
+    // A failed parse is never high confidence, whatever the model claimed.
+    model_confidence: r.parseStage === "fallback"
+      ? null
+      : sanitized.model_confidence,
+  };
+  if (opts.persist) {
+    const { error: updateErr } = await adminClient
+      .from("documents")
+      .update({
+        status: "processed",
+        processed: true,
+        extracted_data: extracted,
+        raw_text: r.raw.slice(0, RAW_TEXT_MAX),
+        confidence: extracted.model_confidence ?? "low",
+        document_type: sanitized.stored_document_type,
+        provider: "openai",
+        model: r.modelUsed,
+        file_mime_type: r.mime,
+        file_size: r.size,
+        extraction_version: PAYROLL_EXTRACTION_VERSION,
+        retry_count: (docRow.retry_count ?? 0) +
+          (docRow.status === "failed" ? 1 : 0),
+        error_message: null,
+      })
+      .eq("id", docRow.id);
+    if (updateErr) {
+      return await r.fail(
+        "UNKNOWN_SCAN_ERROR",
+        "v3_db_update",
+        updateErr.message,
+      );
+    }
+  }
+  log(traceId, "v3_done", {
+    parseStage: r.parseStage,
+    type: extracted.document_type,
+    lines: extracted.line_items.length,
+    persist: opts.persist,
+    elapsed: Date.now() - t0,
+  });
+  return jsonResponse({
+    success: true,
+    document_id: docRow.id,
+    status: "processed",
+    extraction_version: PAYROLL_EXTRACTION_VERSION,
+    persisted: opts.persist,
+    extracted,
+    model: r.modelUsed,
+  });
 }

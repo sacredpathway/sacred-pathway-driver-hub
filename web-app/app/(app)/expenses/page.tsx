@@ -17,8 +17,6 @@ import StatCard from "@/components/StatCard";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import type { Expense } from "@/lib/supabase/types";
 
-export const runtime = "edge";
-
 export default async function ExpensesPage({
   searchParams,
 }: {
@@ -62,7 +60,7 @@ export default async function ExpensesPage({
   if (expenses.length === 0) {
     return (
       <section className="space-y-4">
-        <header className="flex items-baseline justify-between">
+        <header className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
           <Link
             href="/expenses/new"
@@ -90,7 +88,7 @@ export default async function ExpensesPage({
 
   return (
     <section className="space-y-5">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
         <div className="flex items-center gap-3">
           <span className="text-xs text-sp-textSecondary">

@@ -7,6 +7,7 @@
 // =============================================================================
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { profileToBranding, signLogoUrl } from "@/lib/branding/profile";
 
 export interface ReportBranding {
   companyName: string | null;
@@ -23,16 +24,7 @@ export async function fetchReportBranding(
     .eq("id", userId)
     .maybeSingle();
 
-  const companyName = (data?.company_name as string | null) ?? null;
-  const logoPath    = (data?.logo_storage_path as string | null) ?? null;
-
-  let logoUrl: string | null = null;
-  if (logoPath) {
-    const { data: signed } = await supabase
-      .storage
-      .from("branding")
-      .createSignedUrl(logoPath, 60 * 60);
-    logoUrl = signed?.signedUrl ?? null;
-  }
-  return { companyName, logoUrl };
+  const branding = profileToBranding(data);
+  const logoUrl = await signLogoUrl(supabase, branding.logoPath);
+  return { companyName: branding.companyName, logoUrl };
 }
