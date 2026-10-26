@@ -102,12 +102,15 @@ export function createDocumentRepo(supabase: SupabaseClient, ownerId: string): D
       return carrierIdentityFromProfile((data as never) ?? null);
     },
 
-    async createLoad(row) {
+    async createLoad(row, documentId) {
       // Only path: the database serialises "create unless this carrier already
       // has the number" (migration #5). If the function is missing, nothing is
       // written and the rate con waits for a person (no unguarded insert).
+      // Migration #6: the database re-verifies the document itself and takes
+      // every load value from its server-written extraction snapshot, so only
+      // the document and the chosen driver are sent.
       assertLoadColumns({ ...row, profile_id: ownerId }, "autoCreateLoad");
-      const rpc = await supabase.rpc("sph_load_create_verified", { p: row });
+      const rpc = await supabase.rpc("sph_load_create_verified", { p: { document_id: documentId, driver_id: row.driver_id } });
       if (!rpc.error) {
         const r = (rpc.data ?? {}) as { id?: unknown; created?: unknown };
         if (typeof r.id === "string") return { ok: true, id: r.id, created: r.created === true };

@@ -47,6 +47,8 @@ export interface FakeState {
   createMode?: "guarded" | "missing";
   /** loads inserted by createLoad (for assertions) */
   createdLoads?: string[];
+  /** document ids passed to createLoad (migration #6: the DB re-verifies them) */
+  createLoadDocumentIds?: string[];
   /** a competing upload inserts this load number right before our insert (race simulation) */
   raceInsert?: string | null;
 }
@@ -159,8 +161,9 @@ export function createFakeRepo(st: FakeState, ownerId = OWNER, now = new Date("2
     },
     get autoCreateLoads() { return !!st.autoCreate; },
     async carrierIdentity() { return st.identity ?? null; },
-    async createLoad(row) {
+    async createLoad(row, documentId) {
       const norm = (v: unknown) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      (st.createLoadDocumentIds ??= []).push(documentId);
       if (st.raceInsert) {
         st.loads.push({ id: "00000000-race-4000-8000-000000000000", profile_id: ownerId, load_number: st.raceInsert, broker_name: null, pickup_date: null, delivery_date: null, origin: null, destination: null, total_revenue: 1, status: "pending" });
         st.raceInsert = null;

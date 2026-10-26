@@ -30,7 +30,7 @@ MIGRATIONS=(
   "$REPO/supabase/migrations/20261024012624_web_settlement_atomic_writes.sql"
   "$REPO/supabase/migrations/20261024092246_settlement_lock_order.sql"
 )
-PROPOSED="$REPO/supabase/migrations_proposed/PROPOSED_20261105120000_smart_payroll_upload.sql"
+PROPOSED="$REPO/supabase/migrations/20261025225011_smart_payroll_upload.sql"   # applied to production as 20261025225011
 ROLLBACK="$REPO/supabase/migrations_proposed/ROLLBACK_PROPOSED_20261105120000_smart_payroll_upload.sql"
 PGBIN="${PGBIN:-$(dirname "$(command -v postgres 2>/dev/null || echo /usr/lib/postgresql/16/bin/postgres)")}"
 PORT="${PGPORT_TEST:-54337}"
