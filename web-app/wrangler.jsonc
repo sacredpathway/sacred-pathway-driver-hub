@@ -10,6 +10,15 @@
 // build time (scripts/check-required-env.mjs fails the build without them).
 // Runtime-only values (RESEND_API_KEY, RESEND_FROM_EMAIL, NEXT_PUBLIC_APP_URL)
 // are Worker vars/secrets set in the Cloudflare dashboard — never here.
+//
+// Smart Payroll switches (non-secret) live in "vars" below so every change is
+// reviewed and versioned with the code. Owner-approved 2026-10-26: v3
+// extraction for website uploads + a 7-day automatic-DRAFTING pilot for
+// Sacred Pathway LLC only. The pilot turns itself off at
+// SMART_PAYROLL_PILOT_UNTIL (checked on every request). Load auto-creation
+// stays off. Nothing in the code can approve or pay a settlement.
+// Rollback: delete these vars and redeploy, or `wrangler rollback` to the
+// previous version.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "driver-hub-web-worker",
@@ -19,6 +28,14 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+  "vars": {
+    "DOCUMENT_EXTRACTION_VERSION": "v3",
+    "SMART_PAYROLL_CONFIRM": "production",
+    "SMART_PAYROLL_PRODUCTION_ACK": "rmzqxsfhjqrshhdjzhze",
+    "SMART_PAYROLL_PILOT_PROFILES": "23585e59-b6a2-41ce-9e44-c8b848ba16ff",
+    "SMART_PAYROLL_PILOT_UNTIL": "2026-11-02T15:00:00Z",
+    "SMART_LOAD_AUTO_CREATE": "off"
   },
   "services": [
     {

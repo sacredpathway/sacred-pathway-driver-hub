@@ -34,7 +34,7 @@ import {
 import { isWebEditLocked, lineGross, normaliseStatus } from "../settlements/model";
 import { isLoadCompleted, lineFromLoad, periodDateOf, type LoadRow } from "../settlements/workflow";
 import { isYmd } from "../settlements/input";
-import { payrollUseOf, type PolicyResult } from "./policy";
+import { mcKey, payrollUseOf, type PolicyResult } from "./policy";
 import { validatePayrollExtraction, type ValidationResult } from "./validation";
 import { detectDuplicates, documentIdentity, type DuplicateReport, type ExistingDocument } from "./duplicates";
 import type { CarrierIdentity } from "./carrierIdentity";
@@ -417,6 +417,22 @@ export function buildPayrollProposal(input: ProposalInput): PayrollProposal {
   }
   if (policy.reasons.includes("carrier_unconfirmed")) {
     warn("policy:carrier_unconfirmed", "carrier_unconfirmed", "No carrier name or MC is printed on this rate confirmation. Confirm it is addressed to your company.");
+  }
+
+  // ---- pilot review flags (2026-10-26 extraction check) -----------------------------
+  // Each one is a warning: a person must acknowledge it, and automatic drafting holds.
+  const printedMc = mcKey(extraction.values.carrier_mc_number);
+  const ownMcs = (input.identity?.mcNumbers ?? []).map((m) => mcKey(m)).filter((m): m is string => !!m);
+  if (printedMc && ownMcs.length && !ownMcs.includes(printedMc)) {
+    warn("identity:mc_mismatch", "carrier_mc_mismatch", `The carrier MC read from this document (${printedMc}) isn't your MC (${ownMcs.join(", ")}). It may be a DOT number or a misread. Check the paperwork before drafting.`);
+  }
+  const printedDriver = typeof extraction.values.driver_name === "string" ? extraction.values.driver_name.trim() : "";
+  if (printedDriver && printedDriver.split(/[\s,]+/).filter((t) => /[A-Za-z]/.test(t)).length < 2) {
+    warn("driver:ambiguous", "driver_ambiguous", `The document only gives a partial driver name (${printedDriver}). Confirm which driver hauled this load.`);
+  }
+  const total = extraction.values.total_revenue;
+  if (total === undefined || total === null || extraction.missing_required.some((m) => m.split("|").includes("total_revenue"))) {
+    warn("money:total_missing", "total_missing", "No total carrier pay was read from this document. The draft will use your load record's revenue; compare it with the paperwork.");
   }
 
   // ---- load: exact identifiers only --------------------------------------------
