@@ -29,7 +29,7 @@ for m in "$WS/vendor/ios_20260912120000_driver_pay_and_settlements.sql" "$WS/ven
          "$REPO"/supabase/migrations/20261001120000_paystub_payment_integrity.sql "$REPO"/supabase/migrations/20261001120100_cross_platform_payment_integrity.sql \
          "$REPO"/supabase/migrations/20261002120000_document_automation.sql "$REPO"/supabase/migrations/20261024011809_payroll_custom_categories.sql \
          "$REPO"/supabase/migrations/20261024012624_web_settlement_atomic_writes.sql "$REPO"/supabase/migrations/20261024092246_settlement_lock_order.sql \
-         "$REPO"/supabase/migrations_proposed/PROPOSED_20261105120000_smart_payroll_upload.sql; do
+         "$REPO"/supabase/migrations/20261025225011_smart_payroll_upload.sql; do
   "${P[@]}" -c "set client_min_messages = warning" -f "$m" >/dev/null
 done
 "${P[@]}" -f "$WS/05_after_migrations.sql" >/dev/null

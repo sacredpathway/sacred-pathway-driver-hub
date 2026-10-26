@@ -84,8 +84,12 @@ export interface DocumentRepo {
    * database. `created` false = the number already existed (another upload
    * won). `unavailable` = the function is not installed: nothing is written
    * and automatic creation does not happen (no unguarded fallback).
+   * Migration #6: the database also re-verifies the rate confirmation
+   * (`documentId`) against its server-written extraction snapshot and builds
+   * the load from THAT snapshot; only `row.driver_id` is taken from here.
+   * `row` stays the app's own decision (used for logs and the audit record).
    */
-  createLoad?(row: LoadDraftRow): Promise<{ ok: true; id: string; created: boolean } | { ok: false; message: string; unavailable?: boolean }>;
+  createLoad?(row: LoadDraftRow, documentId: string): Promise<{ ok: true; id: string; created: boolean } | { ok: false; message: string; unavailable?: boolean }>;
   /** Documents of this account waiting in review (newest first), for re-matching after a load appears. */
   listWaitingDocuments(limit: number): Promise<AutomationDocument[]>;
   /** True when the document is on a line of an approved/paid settlement. Throws when the check can't be completed. */
@@ -650,7 +654,7 @@ async function tryAutoCreateLoad(repo: DocumentRepo, doc: AutomationDocument, re
   // transaction per carrier + normalised load number under an advisory lock,
   // so two uploads of the same new load yield exactly one load. There is no
   // application-side fallback: without the function nothing is created.
-  const ins = await repo.createLoad(d.row);
+  const ins = await repo.createLoad(d.row, doc.id);
   if (!ins.ok) {
     if (ins.unavailable) {
       (record as RoutingRecord & { auto_create?: unknown }).auto_create = { eligible: true, reasons: ["safeguard_missing"] };

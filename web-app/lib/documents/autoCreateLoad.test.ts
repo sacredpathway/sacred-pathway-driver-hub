@@ -81,6 +81,8 @@ describe("pipeline: rate con for an unknown load", () => {
     const out = await processDocument(repo, doc.id);
     expect(out.state).toBe("auto_routed");
     expect(st.createdLoads).toHaveLength(1);
+    // Migration #6: the rate con itself is sent so the database can re-verify it.
+    expect(st.createLoadDocumentIds).toEqual([doc.id]);
     const d = st.docs.get(doc.id)!;
     expect(d.load_id).toBe(st.createdLoads![0]);
     expect(d.routing!.applied.map((a) => [a.kind, a.mode])).toEqual([["create_load", "automatic"], ["attach_load", "automatic"]]);
