@@ -7,6 +7,20 @@ list below is empty (imported) and `supabase migration list --linked` shows no l
 
 Reconciled 2026-10-25 (repo-side only; production history was read, never written). Repo and production now list the same 43 versions.
 
+## Current status (2026-10-26)
+
+| # | Repo file | Production | Staging |
+|---|---|---|---|
+| 4 | `migrations/20261025225011_smart_payroll_upload.sql` | `20261025225011` | `20261024211251` |
+| 5 | `migrations/20261026003052_auto_create_load.sql` | `20261026003052` | `20261025174009` |
+| 6 | `migrations_proposed/PROPOSED_20261107120000_verified_rate_con_safeguard.sql` | **not applied** | `20261026035158` |
+
+Production = **45** versions, all with a file in `supabase/migrations/`. #6 stays in `migrations_proposed/` (not picked up
+by the CLI) until production applies it; then rename it to `<production version>_verified_rate_con_safeguard.sql` in the
+same commit. Rollback: `migrations_proposed/ROLLBACK_PROPOSED_20261107120000_verified_rate_con_safeguard.sql` (restores
+#5's function byte-identical). #6 must ship together with the web build that sends `document_id`
+(see `RELEASE_AUTO_PAYSTUB.md` Step 5b). The #4 / #5 notes further down are historical.
+
 ## Renamed to the production version (content byte-identical)
 
 | Old repo file | Production version | sha256 (unchanged) |

@@ -101,6 +101,44 @@ select md5(pg_get_functiondef(p.oid)), p.prosecdef,
 ```
 **Rollback:** `ROLLBACK_PROPOSED_20261106120000_auto_create_load.sql`. Without #5 the app creates no loads automatically.
 
+## Step 5b 🔒 — Production migration #6 (verified rate-con safeguard) + matching web deploy, together
+**Why:** #5's `sph_load_create_verified` trusted the request body; any signed-in carrier could create a load with
+arbitrary values and no document (staging finding D2). #6 makes the database re-verify a server-attested rate con.
+**Status (2026-10-26):** branch `feature/verified-rate-con-safeguard` (commit `232149a` + docs commit). Applied on
+**staging only** as `20261026035158` (46 migrations). **Production: not applied** (45 migrations, latest `20261026003052`).
+**Design:** `document_extraction_attestations` = server-only snapshot of `extracted_data`, written by an AFTER trigger on
+`documents` only when the writer is trusted (JWT role `service_role` = Edge Function, or no JWT as postgres/supabase_admin).
+Users: SELECT own rows only; no INSERT/UPDATE/DELETE. `sph_load_create_verified(p)` requires `p.document_id`, the document
+must be the caller's, attested and unedited (current `extracted_data` = snapshot), and passes every rule in SQL (v3,
+rate_confirmation, high confidence, strict parse, no missing/unquoted values, carrier identity, driver, dates, revenue math,
+not duplicate/rejected/filed/corrected). The load is built only from the snapshot. SECURITY INVOKER; manual creation
+unchanged. **Limitation:** the database cannot label a load manual vs automatic after creation.
+**Dependencies (all required):**
+1. #5 applied (done, `20261026003052`).
+2. **Ship with the web build that sends `document_id`** (`repo.createLoad(row, documentId)`). The current production web
+   build (`c6bd9b09`) omits it → with #6 alone every auto-create is refused (`sph:document_required`) and documents go to
+   review (safe, but auto-create stops). Deploy #6 and the web build in the same window.
+3. **Edge Function v22 must write extractions with service_role** (it does: `adminClient`) or nothing is attested.
+4. No backfill: v3 documents extracted before #6 are not attested; re-extract them to make them eligible.
+**Do:** apply `PROPOSED_20261107120000_verified_rate_con_safeguard.sql` (sha256 `94e8a0e4…`), name
+`verified_rate_con_safeguard`; rename the file to `<production version>_verified_rate_con_safeguard.sql` in the same commit;
+deploy the matching web build. Automation stays OFF.
+**Verify:**
+```sql
+select md5(p.prosrc), p.prosecdef from pg_proc p where p.proname = 'sph_load_create_verified';
+-- expect d77391f885c6651368a1c9aece6f31c1, false
+select has_table_privilege('authenticated','public.document_extraction_attestations','insert'),
+       has_table_privilege('authenticated','public.document_extraction_attestations','update'),
+       has_table_privilege('anon','public.document_extraction_attestations','select');   -- expect false,false,false
+select count(*) from pg_trigger where tgname = 'sph_documents_attest_extraction';         -- expect 1
+```
+Business-record counts and fingerprints unchanged (additive migration, no backfill).
+**Tests on staging (2026-10-26):** local DB suite 46/46 · autopay e2e 15/15 (+8 document-less concurrent calls refused) ·
+Smart Payroll e2e 9/9 · staging API 35/35 (10 concurrent HTTP → 1 load) · web vitest 774 passed.
+**Rollback:** `ROLLBACK_PROPOSED_20261107120000_verified_rate_con_safeguard.sql` — drops trigger/helpers/table and restores
+#5's function byte-identical (src md5 `a67860e0…`). After rollback the body-trusting #5 behaviour returns, so keep
+`SMART_LOAD_AUTO_CREATE=off` whenever #6 is not installed. Attestations are lost on rollback (re-apply starts empty).
+
 ## Step 6 🔒 — Edge Function v22: staging (no key = no cost), then production
 Package + checksums: `supabase/deploy/extract-document-v22/`.
 **6a Staging, no OpenAI key (zero cost):** `supabase functions deploy extract-document --project-ref aatkirzwuuegurdlmcpl --no-verify-jwt`
@@ -131,6 +169,7 @@ the driver's; lumper never added; undelivered loads held ("not delivered yet"); 
 **Rollback:** `SMART_PAYROLL_AUTO=off` (drafting) or unset `SMART_PAYROLL_CONFIRM` (everything). Drafts stay editable/deletable.
 
 ## Step 9 🔒 — Enable automatic load creation
+**Gate:** migration #6 (Step 5b) is applied in production with the matching web build. Never enable this on #5 alone.
 **Do:** unset `SMART_LOAD_AUTO_CREATE`.
 **Verify:** a verified rate con for a new load → exactly one load (status `pending`) with the printed driver; the duplicate-load
 monitoring query stays at 2 groups. **iPhone (I4):** the new load appears and opens.
