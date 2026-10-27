@@ -37,8 +37,8 @@ done
 "${P[@]}" -c "set client_min_messages = warning" -f "$REPO/supabase/migrations/20261026003052_auto_create_load.sql" >/dev/null
 "${P[@]}" -f "$WS/05_after_migrations.sql" >/dev/null
 "${P[@]}" -f "$SPU/50_e2e_fixture.sql" >/dev/null 2>&1
-# Proposed #6 (verified rate-con safeguard): automatic creation needs a server-attested document.
-"${P[@]}" -c "set client_min_messages = warning" -f "$REPO/supabase/migrations_proposed/PROPOSED_20261107120000_verified_rate_con_safeguard.sql" >/dev/null
+# #6 (verified rate-con safeguard, production 20261026045202): automatic creation needs a server-attested document.
+"${P[@]}" -c "set client_min_messages = warning" -f "$REPO/supabase/migrations/20261026045202_verified_rate_con_safeguard.sql" >/dev/null
 "${P[@]}" -f "$HERE/60_autopay_fixture.sql" >/dev/null
 # Fingerprint of the settlement write functions BEFORE (must be unchanged after).
 "${P[@]}" -At -c "select md5(string_agg(pg_get_functiondef(p.oid), '' order by p.proname)) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('sph_web_save_settlement','sph_web_transition_settlement')" > "$WORK/fn-before"
