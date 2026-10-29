@@ -6,7 +6,8 @@ import { Simulate } from "react-dom/test-utils";
 import { saveSettlementAction } from "../actions";
 import { renderToStaticMarkup } from "react-dom/server";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
+const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("../actions", () => ({
   saveSettlementAction: vi.fn(), transitionSettlementAction: vi.fn(), createCustomCategoryAction: vi.fn(),
 }));
@@ -101,6 +102,7 @@ describe("SettlementEditor browser autosave", () => {
     vi.useFakeTimers();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     localStorage.clear();
+    router.push.mockReset();
     saveAction.mockReset();
     saveAction.mockResolvedValue(saved());
     host = document.createElement("div");
@@ -181,6 +183,55 @@ describe("SettlementEditor browser autosave", () => {
     expect(backup.base).toBe("2026-10-19T11:00:00Z");
     expect(backup.bundle.additions[1].id).toBe(serverId);
     expect(backup.bundle.header.notes).toBe("leave before save finishes");
+  });
+
+  it("saves pending edits before opening the paystub", async () => {
+    await mount();
+    await notes("include on PDF");
+    await act(async () => { host.querySelector<HTMLElement>('[data-testid="open-paystub"]')!.click(); });
+    expect(saveAction).toHaveBeenCalledTimes(1);
+    expect(saveAction.mock.calls[0][2].header.notes).toBe("include on PDF");
+    expect(router.push).toHaveBeenCalledWith("/settlements/33333333-3333-4333-8333-333333333333/statement");
+  });
+
+  it("keeps the paystub closed if saving fails", async () => {
+    saveAction.mockRejectedValue(new Error("offline"));
+    await mount();
+    await notes("not saved yet");
+    await act(async () => { host.querySelector<HTMLElement>('[data-testid="open-paystub"]')!.click(); });
+    expect(router.push).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("the paystub would be missing them");
+    expect(localStorage.getItem(backupKey)).toContain("not saved yet");
+  });
+
+  it("requires a decision about recovered edits before opening a clean paystub", async () => {
+    const p = props("draft");
+    const draft = structuredClone(p.initial);
+    draft.header.notes = "unsaved backup";
+    localStorage.setItem(backupKey, JSON.stringify({ base: p.updatedAt, at: Date.now(), bundle: draft }));
+    await mount(p);
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    await act(async () => { host.querySelector('[data-testid="open-paystub"]')!.dispatchEvent(click); });
+    expect(click.defaultPrevented).toBe(true);
+    expect(host.textContent).toContain("Restore or discard your unsaved edits first");
+    expect(router.push).not.toHaveBeenCalled();
+    expect(saveAction).not.toHaveBeenCalled();
+  });
+
+  it("waits for a pending autosave and saves newer edits before opening the paystub", async () => {
+    let finish!: (r: Awaited<ReturnType<typeof saveSettlementAction>>) => void;
+    saveAction.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await mount();
+    await notes("first save");
+    await tick();
+    await notes("newer edits");
+    await act(async () => { host.querySelector<HTMLElement>('[data-testid="open-paystub"]')!.click(); });
+    expect(router.push).not.toHaveBeenCalled();
+    await act(async () => { finish(saved()); });
+    await tick(200);
+    expect(saveAction).toHaveBeenCalledTimes(2);
+    expect(saveAction.mock.calls[1][2].header.notes).toBe("newer edits");
+    expect(router.push).toHaveBeenCalledTimes(1);
   });
 
   it("retries a network failure without needing another edit", async () => {
