@@ -36,7 +36,7 @@ import {
   type AuditEvent, type LoadRow,
 } from "@/lib/settlements/workflow";
 import { headerEditRow, snapToStoredPrecision } from "@/lib/settlements/rows";
-import { type EditPayload } from "@/lib/settlements/payload";
+import { type EditPayload, type RowIdMap } from "@/lib/settlements/payload";
 import { UUID_RE, isYmd, parseShare } from "@/lib/settlements/input";
 import { ruleSummary } from "@/lib/settlements/payrule";
 import {
@@ -120,7 +120,7 @@ export async function createSettlementAndOpenAction(input: CreateInput): Promise
 
 export async function saveSettlementAction(
   settlementId: string, expectedUpdatedAt: string | null, payload: EditPayload,
-): Promise<ActionResult<{ updatedAt: string | null; netPay: string }>> {
+): Promise<ActionResult<{ updatedAt: string | null; netPay: string; idMap: RowIdMap }>> {
   if (!UUID_RE.test(settlementId ?? "")) return { ok: false, error: "Invalid settlement." };
   const c = await ctx();
   const r = await saveSettlementCore(c, settlementId, expectedUpdatedAt, payload);

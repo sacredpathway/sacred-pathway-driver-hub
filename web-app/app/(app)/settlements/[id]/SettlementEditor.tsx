@@ -8,9 +8,16 @@
 //  the server (and the iPhone) uses, so the number on screen is the number
 //  that gets saved. Approved / paid / voided settlements render read-only
 //  until explicitly reopened.
+//
+//  Autosave (draft / ready for review only): every change is saved to the
+//  server a few seconds after the user stops typing, and immediately when they
+//  switch tabs, lock the phone or leave the page. A copy is also kept in this
+//  browser until the server has it; reopening the settlement offers to
+//  restore unsaved work when browser storage is available. Approved, paid and
+//  voided settlements are never autosaved (they are read-only until reopened).
 // =============================================================================
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -23,7 +30,7 @@ import { cryptoId } from "@/lib/settlements/payrule";
 import { recalculate, validate, lineFromLoad, type LoadRow, type Issue } from "@/lib/settlements/workflow";
 import { snapToStoredPrecision } from "@/lib/settlements/rows";
 import { parseHours, parseMiles, parseMoney, parseShare } from "@/lib/settlements/input";
-import { sanitizePayload, storedPercents, type EditPayload } from "@/lib/settlements/payload";
+import { applyRowIdMap, sanitizePayload, storedPercents, type EditPayload } from "@/lib/settlements/payload";
 import { saveSettlementAction, transitionSettlementAction } from "../actions";
 import PayRuleEditor from "./PayRuleEditor";
 import CategoryPicker from "./CategoryPicker";
@@ -75,17 +82,26 @@ export default function SettlementEditor(props: EditorProps) {
 
   const [b, setB] = useState<SettlementBundle>(initial);
   const [customs, setCustoms] = useState<CustomCategory[]>(props.customs.categories);
-  const [saving, startSave] = useTransition();
   const [message, setMessage] = useState<{ tone: "ok" | "err"; text: string; list?: string[] } | null>(null);
   const [openLine, setOpenLine] = useState<string | null>(null);
 
-  const dirty = useMemo(() => JSON.stringify(b) !== JSON.stringify(initial), [b, initial]);
-  useEffect(() => {
-    if (!dirty) return;
-    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", h);
-    return () => window.removeEventListener("beforeunload", h);
-  }, [dirty]);
+  // ---- autosave state ----
+  // `version` is the server's updated_at this editor last saw or wrote;
+  // `savedKey` is the payload the server holds. Dirty = what's on screen
+  // differs from what's saved (not from the page's first render, which no
+  // longer reloads after each save).
+  const [version, setVersion] = useState<string | null>(props.updatedAt);
+  const [savedKey, setSavedKey] = useState(() => JSON.stringify(toPayload(initial)));
+  const [saving, setSaving] = useState(false);
+  const [saveAttempt, setSaveAttempt] = useState(0);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [restore, setRestore] = useState<LocalBackup | null>(null);
+  const ownVersions = useRef(new Set<string | null>([props.updatedAt]));
+  const inFlight = useRef(false);
+  const [backupReady, setBackupReady] = useState(false);
+  const autosaveOn = !readOnly && !conflict && !restore;
+  const backupKey = `sph.settlementDraft.v1.${initial.header.id}`;
 
   // ---- live, exact calculation (same engine as server + iPhone) ----
   const live = useMemo(() => recalculate(snapToStoredPrecision(b), props.rules), [b, props.rules]);
@@ -95,6 +111,8 @@ export default function SettlementEditor(props: EditorProps) {
     [live, props.otherNumbers, props.alreadyPaid, r],
   );
   const payload = useMemo(() => toPayload(b), [b]);
+  const payloadKey = useMemo(() => JSON.stringify(payload), [payload]);
+  const dirty = payloadKey !== savedKey;
   const gate = useMemo(() => sanitizePayload(payload, {
     existing: initial,
     allowedNewLoadIds: new Set(props.eligible.map((l) => l.id)),
@@ -113,15 +131,128 @@ export default function SettlementEditor(props: EditorProps) {
   const onLoadIds = new Set(b.loadLines.map((l) => l.loadId).filter(Boolean));
   const addable = props.eligible.filter((l) => !onLoadIds.has(l.id));
 
-  const save = () => {
-    setMessage(null);
-    startSave(async () => {
-      const res = await saveSettlementAction(b.header.id, props.updatedAt, payload);
-      if (!res.ok) { setMessage({ tone: "err", text: res.error, list: res.errors }); return; }
-      setMessage({ tone: "ok", text: `Saved. Net pay ${money(res.netPay).format()}.` });
-      router.refresh();
-    });
-  };
+  // Latest values for the save loop (timers and unload handlers run outside render).
+  const latest = useRef({ bundle: b, payload, payloadKey, savedKey, version, fieldErrors, autosaveOn });
+  useEffect(() => { latest.current = { bundle: b, payload, payloadKey, savedKey, version, fieldErrors, autosaveOn }; });
+
+  const flush = useCallback(async (manual = false): Promise<void> => {
+    const cur = latest.current;
+    if (!cur.autosaveOn || cur.payloadKey === cur.savedKey) return;
+    if (cur.fieldErrors > 0) return; // invalid input stays in the browser backup until fixed
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      const res = await saveSettlementAction(initial.header.id, cur.version, cur.payload);
+      if (!res.ok) {
+        if (/changed somewhere else/i.test(res.error)) { latest.current.autosaveOn = false; setConflict(true); }
+        setMessage({ tone: "err", text: res.error, list: res.errors });
+        return;
+      }
+      const map = res.idMap ?? {};
+      ownVersions.current.add(res.updatedAt);
+      setVersion(res.updatedAt);
+      // Adopt the ids the server gave new lines so the next save updates them.
+      const sentKey = JSON.stringify(remapPayload(cur.payload, map));
+      const currentBundle = applyRowIdMap(latest.current.bundle, map);
+      const currentPayload = remapPayload(latest.current.payload, map);
+      latest.current = { ...latest.current, bundle: currentBundle, payload: currentPayload,
+        payloadKey: JSON.stringify(currentPayload), version: res.updatedAt, savedKey: sentKey };
+      // A request can finish after navigation unmounts us. Keep the backup's
+      // row ids/version current even when React can no longer run effects.
+      try {
+        if (latest.current.payloadKey === sentKey) localStorage.removeItem(backupKey);
+        else localStorage.setItem(backupKey, JSON.stringify({ base: res.updatedAt, at: Date.now(), bundle: currentBundle } satisfies LocalBackup));
+      } catch { /* storage unavailable */ }
+      setSavedKey(sentKey);
+      if (Object.keys(map).length > 0) {
+        setB((x) => applyRowIdMap(x, map));
+        setOpenLine((o) => (o && map[o] ? map[o] : o));
+      }
+      setSavedAt(new Date());
+      setMessage(manual ? { tone: "ok", text: `Saved. Net pay ${money(res.netPay).format()}.` } : null);
+    } catch (e) {
+      setMessage({ tone: "err", text: `Couldn't save (${(e as Error).message || "network"}). Your changes are kept in this browser and will retry.` });
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+      setSaveAttempt((n) => n + 1);
+    }
+  }, [initial.header.id, backupKey]);
+
+  const save = () => { setMessage(null); void flush(true); };
+
+  // Debounced autosave after the user stops editing.
+  useEffect(() => {
+    if (!autosaveOn || !dirty || fieldErrors > 0 || saving) return;
+    const t = window.setTimeout(() => { void flush(); }, AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(t);
+  }, [payloadKey, dirty, autosaveOn, fieldErrors, saving, saveAttempt, flush]);
+
+  // Save right away when the tab is hidden / the phone locks / the page is
+  // left (in-app navigation unmounts the editor).
+  useEffect(() => {
+    const now = () => { void flush(); };
+    const onVis = () => { if (document.visibilityState === "hidden") now(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", now);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", now);
+      now();
+    };
+  }, [flush]);
+
+  // Browser copy until the server has it (closing the tab, offline, or a
+  // field that must be fixed before it can save).
+  useEffect(() => {
+    if (readOnly || !backupReady || restore) return;
+    try {
+      if (dirty) localStorage.setItem(backupKey, JSON.stringify({ base: version, at: Date.now(), bundle: b } satisfies LocalBackup));
+      else localStorage.removeItem(backupKey);
+    } catch { /* storage unavailable: server autosave still runs */ }
+  }, [b, dirty, version, readOnly, backupKey, backupReady, restore]);
+
+  // On open: offer to restore edits that never reached the server.
+  useEffect(() => {
+    if (readOnly) return;
+    try {
+      const raw = localStorage.getItem(backupKey);
+      if (!raw) return;
+      const bk = JSON.parse(raw) as LocalBackup;
+      const differs = JSON.stringify(toPayload(bk.bundle)) !== JSON.stringify(toPayload(initial));
+      if (differs) setRestore({ ...bk, stale: bk.base !== props.updatedAt }); else localStorage.removeItem(backupKey);
+    } catch { /* ignore a corrupt or blocked backup */ }
+    finally { setBackupReady(true); }
+    // run once per settlement
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backupKey]);
+
+  // Warn only while something is genuinely unsaved.
+  useEffect(() => {
+    if (!dirty && !saving) return;
+    const h = (e: BeforeUnloadEvent) => { void flush(); e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty, saving, flush]);
+
+  // The page re-renders after every save. Our own saves keep what's on screen;
+  // anything else (status change, iPhone edit, reload) shows the server copy.
+  useEffect(() => {
+    if (ownVersions.current.has(props.updatedAt) || inFlight.current) return;
+    if (dirty) {
+      latest.current.autosaveOn = false;
+      setConflict(true);
+      return;
+    }
+    ownVersions.current.add(props.updatedAt);
+    setB(initial);
+    setCustoms(props.customs.categories);
+    setVersion(props.updatedAt);
+    setSavedKey(JSON.stringify(toPayload(initial)));
+    setConflict(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.updatedAt]);
 
   return (
     <div className="space-y-5">
@@ -152,6 +283,19 @@ export default function SettlementEditor(props: EditorProps) {
       )}
       {!canEdit && (
         <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-sp-textSecondary">View only — this settlement belongs to your carrier’s account.</div>
+      )}
+      {restore && !readOnly && (
+        <div data-testid="restore-banner" className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm text-sky-100">
+          <span className="min-w-0 flex-1">You have edits from {new Date(restore.at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })} that weren’t saved yet.{restore.stale ? " This settlement changed elsewhere since then — restoring puts your version back over it." : ""}</span>
+          <button type="button" onClick={() => { setB(restore.bundle); setRestore(null); }} className="rounded-md bg-sky-400/20 px-3 py-1 text-xs font-semibold hover:bg-sky-400/30">Restore my edits</button>
+          <button type="button" onClick={() => { try { localStorage.removeItem(backupKey); } catch { /* */ } setRestore(null); }} className="rounded-md border border-white/10 px-3 py-1 text-xs hover:bg-white/5">Discard</button>
+        </div>
+      )}
+      {conflict && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-orange-300/30 bg-orange-300/10 px-3 py-2 text-sm text-orange-100">
+          <span className="min-w-0 flex-1">This settlement was changed on another device or tab, so autosave paused. Your edits are kept in this browser.</span>
+          <button type="button" onClick={() => window.location.reload()} className="rounded-md bg-orange-300/20 px-3 py-1 text-xs font-semibold hover:bg-orange-300/30">Reload latest</button>
+        </div>
       )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -349,9 +493,17 @@ export default function SettlementEditor(props: EditorProps) {
           {!readOnly && (
             <div className="rounded-2xl border border-white/10 bg-sp-card p-4">
               {message && <Msg m={message} />}
-              <button type="button" onClick={save} disabled={!dirty || saving || fieldErrors > 0}
+              <p data-testid="autosave-status" aria-live="polite" className="mb-2 text-[11px] text-sp-textSecondary">
+                {conflict ? "Autosave paused — reload to continue."
+                  : saving ? "Saving…"
+                  : dirty && fieldErrors > 0 ? "Not saved yet — fix the field below. Kept in this browser meanwhile."
+                  : dirty ? "Autosave on · saving shortly…"
+                  : savedAt ? `Autosave on · all changes saved ${savedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+                  : "Autosave on · you can leave and come back any time."}
+              </p>
+              <button type="button" onClick={save} disabled={!dirty || saving || fieldErrors > 0 || conflict}
                 className="w-full rounded-md bg-sp-gold px-4 py-2 text-sm font-semibold text-sp-black hover:bg-sp-goldLight disabled:opacity-50">
-                {saving ? "Saving…" : dirty ? "Save changes" : "All changes saved"}
+                {saving ? "Saving…" : dirty ? "Save now" : "All changes saved"}
               </button>
               {fieldErrors > 0 && (
                 <div className="mt-1 text-[11px] text-red-300">
@@ -359,13 +511,12 @@ export default function SettlementEditor(props: EditorProps) {
                   <ul className="list-disc pl-4">{gate.errors.slice(0, 4).map((e) => <li key={e}>{e}</li>)}</ul>
                 </div>
               )}
-              {dirty && <button type="button" onClick={() => { setB(initial); setMessage(null); }} className="mt-2 w-full rounded-md border border-white/10 px-4 py-1.5 text-xs text-sp-textPrimary hover:bg-white/5">Discard changes</button>}
             </div>
           )}
           {readOnly && message && <Msg m={message} />}
 
           {canEdit && !initial.header.isEstimate && (
-            <StatusActions id={initial.header.id} status={status} dirty={dirty} updatedAt={props.updatedAt}
+            <StatusActions id={initial.header.id} status={status} dirty={dirty || saving} updatedAt={version}
               blockers={issues.filter((i) => i.severity === "error").length}
               onDone={(m) => { setMessage(m); router.refresh(); }} />
           )}
@@ -529,7 +680,7 @@ function StatusActions({ id, status, dirty, updatedAt, blockers, onDone }: {
   return (
     <div className="space-y-2 rounded-2xl border border-white/10 bg-sp-card p-4">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-sp-textSecondary">Status</p>
-      {dirty && <p className="text-[11px] text-orange-200">Save your changes before changing status.</p>}
+      {dirty && <p className="text-[11px] text-orange-200">Saving your changes — status actions unlock once they’re saved.</p>}
       {(status === "draft" || status === "ready_for_review") && (
         <>
           <button type="button" disabled={pending || dirty || blockers > 0} onClick={() => go("approved")} className={btn + " bg-sp-gold text-sp-black hover:bg-sp-goldLight"}>
@@ -618,4 +769,14 @@ function toPayload(b: SettlementBundle): EditPayload {
     },
     loadLines: b.loadLines, additions: b.additions, deductions: b.deductions,
   };
+}
+
+const AUTOSAVE_DELAY_MS = 2500;
+
+interface LocalBackup { base: string | null; at: number; bundle: SettlementBundle; stale?: boolean }
+
+/** The payload as the server now holds it: new lines under their stored ids. */
+function remapPayload(p: EditPayload, map: Record<string, string>): EditPayload {
+  const re = <T extends { id: string }>(xs: T[]) => xs.map((x) => (map[x.id] ? { ...x, id: map[x.id] } : x));
+  return { ...p, loadLines: re(p.loadLines), additions: re(p.additions), deductions: re(p.deductions) };
 }

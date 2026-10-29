@@ -79,7 +79,9 @@ export default async function SettlementDetailPage({ params }: { params: Promise
 
   return (
     <SettlementEditor
-      key={bundle.header.updatedAt ?? "new"}
+      // Keyed by settlement, not version: autosave must not remount the
+      // editor (and wipe what the user is typing) every time it saves.
+      key={bundle.header.id}
       initial={bundle}
       updatedAt={bundle.header.updatedAt}
       driverName={driver?.name ?? "Unassigned"}
