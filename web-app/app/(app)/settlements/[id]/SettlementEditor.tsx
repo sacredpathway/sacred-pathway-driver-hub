@@ -271,7 +271,17 @@ export default function SettlementEditor(props: EditorProps) {
         <div className="flex flex-wrap gap-2">
           <Link href="/settlements" className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-sp-textPrimary hover:bg-white/5">← Settlements</Link>
           <Link href="/payroll" className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-sp-textPrimary hover:bg-white/5">Payroll history</Link>
-          <Link href={`/settlements/${initial.header.id}/statement`} data-testid="open-paystub" className="rounded-md border border-sp-gold/40 px-3 py-1.5 text-xs font-semibold text-sp-gold hover:bg-sp-gold/10">Paystub / PDF</Link>
+          <Link href={`/settlements/${initial.header.id}/statement`} data-testid="open-paystub"
+            onClick={(e) => {
+              // The paystub prints what is SAVED: save pending edits first.
+              if (!dirty || readOnly) return;
+              e.preventDefault();
+              if (fieldErrors > 0) { setMessage({ tone: "err", text: "Fix the highlighted fields first — the paystub only shows saved changes." }); return; }
+              void flush(true).then(() => {
+                if (latest.current.payloadKey === latest.current.savedKey) router.push(`/settlements/${initial.header.id}/statement`);
+              });
+            }}
+            className="rounded-md border border-sp-gold/40 px-3 py-1.5 text-xs font-semibold text-sp-gold hover:bg-sp-gold/10">Paystub / PDF</Link>
           <button type="button" onClick={() => window.print()} className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-sp-textPrimary hover:bg-white/5">Print</button>
         </div>
       </header>
