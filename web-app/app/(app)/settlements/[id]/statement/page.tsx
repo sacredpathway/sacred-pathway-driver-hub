@@ -18,6 +18,7 @@ import { loadBundle } from "@/lib/settlements/server";
 import { displayCalculation, periodDescription } from "@/lib/settlements/workflow";
 import { STATUS_LABEL, SETTLEMENT_TYPE_LABEL, effectivePayRule, lineGross, money } from "@/lib/settlements/model";
 import { ruleSummary } from "@/lib/settlements/payrule";
+import { statementSections } from "@/lib/settlements/statement";
 import { documentTypeLabel } from "@/lib/documents/taxonomy";
 import PrintButton from "@/app/(app)/payroll/[id]/print/PrintButton";
 import PrintAutoTrigger from "@/app/(app)/reports/PrintAutoTrigger";
@@ -70,9 +71,7 @@ export default async function SettlementStatementPage({
   const status = b.header.status;
   const mark = watermarkFor(status);
   const earningsByLine = new Map(r.lineItems.filter((l) => l.kind === "loadEarning").map((l) => [l.id, l]));
-  const settlementEarnings = r.lineItems.filter((l) => l.kind === "settlementEarning");
-  const additions = r.lineItems.filter((l) => l.kind === "addition");
-  const deductions = r.lineItems.filter((l) => l.kind === "driverDeduction");
+  const { settlementEarnings, additions, driverDeductions: deductions, companyPaid, companyPaidTotal } = statementSections(r);
   const docs = (docsRaw ?? []) as Array<{ id: string; document_type: string | null; routing: { type?: string } | null }>;
 
   return (
@@ -178,6 +177,19 @@ export default async function SettlementStatementPage({
               <tbody>
                 {deductions.map((x) => <tr key={x.id}><td>{x.label} <span className="muted">· {x.basis}</span></td><td className="r">−{x.amount.format()}</td></tr>)}
                 <tr className="subtotal"><td>Total deductions</td><td className="r">−{r.totalDriverDeductions.format()}</td></tr>
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {companyPaid.length > 0 && (
+          <section className="block">
+            <h3>Paid by the company</h3>
+            <table className="lines" data-testid="statement-company-paid">
+              <thead><tr><th>Description</th><th className="r">Amount</th></tr></thead>
+              <tbody>
+                {companyPaid.map((x) => <tr key={x.id}><td>{x.label} <span className="muted">· {x.basis}</span></td><td className="r">{x.amount.format()}</td></tr>)}
+                <tr className="subtotal"><td>Total paid by the company (not taken from driver pay)</td><td className="r">{companyPaidTotal.format()}</td></tr>
               </tbody>
             </table>
           </section>

@@ -182,6 +182,22 @@ export default function SettlementEditor(props: EditorProps) {
 
   const save = () => { setMessage(null); void flush(true); };
 
+  // The paystub prints what is SAVED. Save pending edits (waiting for any save
+  // already running), then open it; explain instead of doing nothing.
+  const openPaystubAfterSave = async () => {
+    const url = `/settlements/${initial.header.id}/statement`;
+    const unsaved = (text: string) => setMessage({ tone: "err", text });
+    if (latest.current.fieldErrors > 0) return unsaved("Fix the highlighted fields first — the paystub only shows saved changes.");
+    if (restore) return unsaved("Restore or discard your unsaved edits first, then open the paystub.");
+    if (!latest.current.autosaveOn) return unsaved("This settlement changed elsewhere — reload it first so the paystub matches what you see.");
+    for (let i = 0; i < 3 && latest.current.payloadKey !== latest.current.savedKey; i++) {
+      for (let w = 0; inFlight.current && w < 50; w++) await new Promise((r) => setTimeout(r, 200));
+      await flush(true);
+    }
+    if (latest.current.payloadKey === latest.current.savedKey) router.push(url);
+    else unsaved("Couldn’t save your latest changes, so the paystub would be missing them. Try “Save now”.");
+  };
+
   // Debounced autosave after the user stops editing.
   useEffect(() => {
     if (!autosaveOn || !dirty || fieldErrors > 0 || saving) return;
@@ -271,7 +287,14 @@ export default function SettlementEditor(props: EditorProps) {
         <div className="flex flex-wrap gap-2">
           <Link href="/settlements" className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-sp-textPrimary hover:bg-white/5">← Settlements</Link>
           <Link href="/payroll" className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-sp-textPrimary hover:bg-white/5">Payroll history</Link>
-          <Link href={`/settlements/${initial.header.id}/statement`} data-testid="open-paystub" className="rounded-md border border-sp-gold/40 px-3 py-1.5 text-xs font-semibold text-sp-gold hover:bg-sp-gold/10">Paystub / PDF</Link>
+          <Link href={`/settlements/${initial.header.id}/statement`} data-testid="open-paystub"
+            onClick={(e) => {
+              // The paystub prints what is SAVED: save pending edits first.
+              if (readOnly || (!dirty && !restore && !conflict && !saving)) return;
+              e.preventDefault();
+              void openPaystubAfterSave();
+            }}
+            className="rounded-md border border-sp-gold/40 px-3 py-1.5 text-xs font-semibold text-sp-gold hover:bg-sp-gold/10">Paystub / PDF</Link>
           <button type="button" onClick={() => window.print()} className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-sp-textPrimary hover:bg-white/5">Print</button>
         </div>
       </header>
