@@ -281,6 +281,29 @@ function sanitizeRule(
  * settlement, and the upsert would move that row. Rows already on this
  * settlement keep their (proven) ids. Mutates and returns `cleaned`.
  */
+/** Browser line id -> id the server stored it under (new lines only). */
+export type RowIdMap = Record<string, string>;
+
+/** Which ids `mintNewRowIds` replaced, by position (it preserves order). */
+export function rowIdMap(before: SettlementBundle, after: SettlementBundle): RowIdMap {
+  const map: RowIdMap = {};
+  const pair = (a: Array<{ id: string }>, b: Array<{ id: string }>) => {
+    a.forEach((x, i) => { const y = b[i]; if (y && y.id !== x.id) map[x.id] = y.id; });
+  };
+  pair(before.loadLines, after.loadLines);
+  pair(before.additions, after.additions);
+  pair(before.deductions, after.deductions);
+  return map;
+}
+
+/** Re-key the editor's lines to the ids the server saved them under, so the
+ *  next (auto)save updates those rows instead of inserting them again. */
+export function applyRowIdMap(b: SettlementBundle, map: RowIdMap): SettlementBundle {
+  if (Object.keys(map).length === 0) return b;
+  const re = <T extends { id: string }>(xs: T[]) => xs.map((x) => (map[x.id] ? { ...x, id: map[x.id] } : x));
+  return { ...b, loadLines: re(b.loadLines), additions: re(b.additions), deductions: re(b.deductions) };
+}
+
 export function mintNewRowIds(prev: SettlementBundle, cleaned: SettlementBundle): SettlementBundle {
   const l = new Set(prev.loadLines.map((x) => x.id));
   const a = new Set(prev.additions.map((x) => x.id));

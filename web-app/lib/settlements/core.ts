@@ -27,7 +27,7 @@ import {
   isLoadCompleted, periodDescription, recalculate, resolveToday, validate, type AuditEvent, type LoadRow,
 } from "@/lib/settlements/workflow";
 import { headerEditRow, snapToStoredPrecision } from "@/lib/settlements/rows";
-import { mintNewRowIds, sanitizePayload, type EditPayload } from "@/lib/settlements/payload";
+import { mintNewRowIds, rowIdMap, sanitizePayload, type EditPayload, type RowIdMap } from "@/lib/settlements/payload";
 import { UUID_RE, isYmd, parseHours } from "@/lib/settlements/input";
 import { cryptoId } from "@/lib/settlements/payrule";
 import {
@@ -173,7 +173,7 @@ export async function createSettlementCore(c: CoreCtx, input: CreateInput, opts:
 
 export async function saveSettlementCore(
   c: CoreCtx, settlementId: string, expectedUpdatedAt: string | null, payload: EditPayload, opts: CoreOptions = {},
-): Promise<ActionResult<{ updatedAt: string | null; netPay: string }>> {
+): Promise<ActionResult<{ updatedAt: string | null; netPay: string; idMap: RowIdMap }>> {
   if (!UUID_RE.test(settlementId ?? "")) return { ok: false, error: "Invalid settlement." };
   const { supabase, user, actor } = c;
 
@@ -215,7 +215,9 @@ export async function saveSettlementCore(
   // Row ids for NEW lines are minted here, never taken from the browser: a
   // client-chosen id could match a row on another (e.g. paid) settlement and
   // the upsert would move it. Existing rows keep ids proven to belong here.
+  const beforeMint = { ...cleaned, loadLines: [...cleaned.loadLines], additions: [...cleaned.additions], deductions: [...cleaned.deductions] };
   mintNewRowIds(prev, cleaned);
+  const idMap = rowIdMap(beforeMint, cleaned);
   // Server-built, trusted deductions (automation only; never from a browser).
   if (opts.serverDeductions && opts.serverDeductions.length > 0) {
     cleaned.deductions = [...cleaned.deductions, ...opts.serverDeductions.map((d, k) => ({ ...d, id: cryptoId(), sortOrder: cleaned.deductions.length + k }))];
@@ -255,5 +257,5 @@ export async function saveSettlementCore(
       metadata: { label: `Settlement ${next.header.settlementNumber ?? ""} updated (${events.length} change${events.length === 1 ? "" : "s"})`.replace("  ", " "), amount: result.netDriverPay.toNumber() },
     });
   }
-  return { ok: true, updatedAt, netPay: result.netDriverPay.toFixed2() };
+  return { ok: true, updatedAt, netPay: result.netDriverPay.toFixed2(), idMap };
 }
